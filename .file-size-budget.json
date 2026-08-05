@@ -5,8 +5,8 @@
   "exempt": [
     {
       "path": "src/web/worker/search-worker.js",
-      "lines": 411,
-      "_reason": "Search Web Worker — title index, inverted/prefix builders, scoring, postMessage protocol, and the new origin-validating init guard all in a single file because Web Workers can't share scope across module boundaries without bundler support. Pinned to 411."
+      "lines": 423,
+      "_reason": "Search Web Worker — title index, inverted/prefix builders, scoring, postMessage protocol, the origin-validating init guard, and the manifest-filename allowlist all in a single file because Web Workers can't share scope across module boundaries without bundler support. The guards genuinely belong here: they cannot be imported, so this file is the only place they can live. Pinned to 423."
     },
     {
       "path": "src/storage/database.js",

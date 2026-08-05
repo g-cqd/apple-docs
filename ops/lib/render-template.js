@@ -11,7 +11,7 @@
  * caller decides whether that's an error or just a warning).
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, basename, join } from 'node:path'
 
 const PLACEHOLDER_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g
@@ -102,26 +102,27 @@ export function renderTemplate(templatePath, outputPath, env, opts = {}) {
 function defaultRead(p) { return readFileSync(p, 'utf8') }
 
 /**
- * Atomic write with O_EXCL on the staging file so a hostile symlink
- * cannot redirect the write to an attacker-controlled path. The
- * staging file is created in the same directory as the target so the
- * rename is atomic (same filesystem, POSIX guarantee).
+ * Atomic write: stage in a mkdtemp directory, then rename onto the target.
  *
- * Resolves CodeQL `js/insecure-temporary-file` on this writer by
- * removing the writeFileSync-with-overwrite pattern in favor of
- * create-exclusive + rename.
+ * `install` runs this as root while the surrounding tree is operator-owned,
+ * so a predictable staging name (`.<basename>.<pid>.<now>.tmp`) is a real
+ * escalation vector — anyone able to create entries in `dir` can pre-place a
+ * symlink there and have root write through it. O_EXCL closes the race but
+ * not the prediction (CodeQL js/insecure-temporary-file).
+ *
+ * mkdtemp gives a kernel-random, mode-0700 directory, so neither the staging
+ * file nor its parent is guessable. Staging stays in the target's directory
+ * so the rename is atomic (same filesystem, POSIX guarantee).
  */
 function defaultWrite(p, content) {
   const dir = dirname(p)
-  const staging = join(dir, `.${basename(p)}.${process.pid}.${Date.now()}.tmp`)
+  const stagingDir = mkdtempSync(join(dir, `.${basename(p)}.`))
   try {
+    const staging = join(stagingDir, basename(p))
     writeFileSync(staging, content, { flag: 'wx', mode: 0o644 })
     renameSync(staging, p)
-  } catch (err) {
-    if (existsSync(staging)) {
-      try { unlinkSync(staging) } catch { /* tolerate */ }
-    }
-    throw err
+  } finally {
+    rmSync(stagingDir, { recursive: true, force: true })
   }
 }
 

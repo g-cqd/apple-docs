@@ -31,6 +31,16 @@ function validateBase(rawBase) {
   return /^https?:/.test(parsed.protocol) ? rawBase : ''
 }
 
+/** Bare `name.hash.json` only — no separators, `..`, or scheme. */
+function safeManifestFile(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._-]+$/.test(value)) return null
+  return value === '.' || value === '..' ? null : value
+}
+
+// No `event.origin` check: this is a DEDICATED worker, so the only possible
+// sender is the document that constructed it and `event.origin` is always ''.
+// The value that needs validating is `base` — validateBase() pins it to the
+// worker's own origin. (CodeQL js/missing-origin-check flags this regardless.)
 self.addEventListener('message', async (event) => {
   const { type, query, limit, base, seqId } = event.data
 
@@ -51,12 +61,14 @@ self.addEventListener('message', async (event) => {
         if (manifestResp.ok) {
           const manifest = await manifestResp.json()
           if (manifest.files) {
-            if (manifest.files['title-index']) {
-              titleUrl = `${baseUrl}/data/search/${manifest.files['title-index']}`
-            }
-            if (manifest.files.aliases) {
-              aliasUrl = `${baseUrl}/data/search/${manifest.files.aliases}`
-            }
+            // Manifest values land straight in a fetch URL, so treat them as
+            // data, not path fragments — a `/`, `..` or scheme would steer
+            // the request off the data dir (js/client-side-request-forgery).
+            // Same-origin manifest, so this is defence in depth.
+            const titleFile = safeManifestFile(manifest.files['title-index'])
+            const aliasFile = safeManifestFile(manifest.files.aliases)
+            if (titleFile) titleUrl = `${baseUrl}/data/search/${titleFile}`
+            if (aliasFile) aliasUrl = `${baseUrl}/data/search/${aliasFile}`
           }
         }
       } catch {
