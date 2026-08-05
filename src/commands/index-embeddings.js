@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { quantizeTo, quantizeI8 } from '../search/embedding.js'
-import { getEmbedder } from '../search/embedder.js'
+import { getEmbedder, getEmbedderLastError } from '../search/embedder.js'
 import { chunkDocument } from '../search/chunker.js'
 import { _resetVectorCache } from '../search/semantic.js'
 
@@ -17,9 +17,14 @@ import { _resetVectorCache } from '../search/semantic.js'
  * `embed_model` / `embed_dims` are recorded in snapshot_meta so the reader can
  * width-guard against a mismatched snapshot.
  *
- * Resumable: without `--full`, only documents with no chunks are processed.
+ * Resumable + incremental: without `--full`, documents with no chunks are
+ * processed, plus documents whose `updated_at` advanced past the
+ * `embed_indexed_at` stamp (mirroring the body index's incremental signal —
+ * upsertDocument only bumps `updated_at` on a real content change). The stamp
+ * records the scan's START time so a document upserted mid-scan is never
+ * skipped by the next run.
  * The embedder is injectable (`opts.embedder`) so tests use a deterministic
- * fake and never load `@huggingface/transformers` or a model.
+ * fake and never load a model.
  *
  * @param {{ full?: boolean, embedder?: { embed(t: string): Promise<Float32Array> } }} opts
  * @param {{ db, dataDir?, logger, onProgress? }} ctx
@@ -37,21 +42,32 @@ export async function indexEmbeddings(opts, ctx) {
   }
 
   const modelsDir = dataDir ? join(dataDir, 'resources', 'models') : undefined
-  const embedder = opts?.embedder ?? (await getEmbedder({ logger, modelsDir }))
+  const embedder = opts?.embedder ?? (await getEmbedder({ logger, modelsDir, fetchModels: opts?.fetchModels }))
   if (!embedder) {
+    const reason = getEmbedderLastError()
     return {
       status: 'error',
-      message: 'Semantic embedder unavailable — the embedding model was not found locally. It ships with `apple-docs setup`; set APPLE_DOCS_ALLOW_REMOTE_MODELS=1 to fetch it.',
+      message: `Semantic embedder unavailable${reason ? ` — ${reason}` : ''}. Search stays lexical-only; re-run \`apple-docs index embeddings\` once resolved.`,
     }
   }
 
   const full = !!opts?.full
+  const scanStartedAt = new Date().toISOString()
+  const since = full
+    ? null
+    : (db.db.query("SELECT value FROM schema_meta WHERE key = 'embed_indexed_at'").get()?.value ?? null)
   const rows = (full
     ? db.db.query('SELECT id, title, abstract_text, headings FROM documents ORDER BY id')
-    : db.db.query('SELECT id, title, abstract_text, headings FROM documents WHERE id NOT IN (SELECT document_id FROM document_chunks) ORDER BY id')
-  ).all()
+    : db.db.query(
+      `SELECT id, title, abstract_text, headings FROM documents
+       WHERE id NOT IN (SELECT document_id FROM document_chunks)
+          OR ($since IS NOT NULL AND updated_at > $since)
+       ORDER BY id`,
+    )
+  ).all(...(full ? [] : [{ $since: since }]))
   const total = rows.length
   if (total === 0) {
+    db.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('embed_indexed_at', ?)", [scanStartedAt])
     logger?.info?.('Embedding index is up to date.')
     return { status: 'ok', indexed: 0, total: 0, chunks: 0 }
   }
@@ -106,6 +122,7 @@ export async function indexEmbeddings(opts, ctx) {
     ctx.onProgress?.({ done: indexed, total })
   }
 
+  db.db.run("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('embed_indexed_at', ?)", [scanStartedAt])
   _resetVectorCache() // in-process readers must rebuild from the new tables
   db.resetSemanticCountCaches() // memoized vector/chunk counts are now stale (§10(B))
   logger?.info?.(`Embedding index built: ${chunkCount} chunks across ${indexed}/${total} documents.`)

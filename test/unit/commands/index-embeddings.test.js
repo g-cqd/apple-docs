@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
 import { DocsDatabase } from '../../../src/storage/database.js'
 import { indexEmbeddings } from '../../../src/commands/index-embeddings.js'
 import { VECTOR_DIMS, VECTOR_BYTES } from '../../../src/search/embedding.js'
+import { _resetEmbedder } from '../../../src/search/embedder.js'
 
 // Deterministic fake embedder (xorshift seeded by text) — no ONNX dependency.
 export function fakeEmbedder() {
@@ -56,10 +57,11 @@ describe('indexEmbeddings', () => {
   test('errors clearly when no embedder is available', async () => {
     const prev = process.env.APPLE_DOCS_SEMANTIC
     process.env.APPLE_DOCS_SEMANTIC = 'off' // forces getEmbedder() → null
+    _resetEmbedder() // drop any cached result (and its failure reason) from earlier tests
     try {
       const res = await indexEmbeddings({}, ctx)
       expect(res.status).toBe('error')
-      expect(res.message).toMatch(/embedding model|apple-docs setup/)
+      expect(res.message).toMatch(/Semantic embedder unavailable — semantic search disabled/)
     } finally {
       if (prev === undefined) delete process.env.APPLE_DOCS_SEMANTIC
       else process.env.APPLE_DOCS_SEMANTIC = prev
