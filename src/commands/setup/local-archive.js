@@ -72,7 +72,7 @@ export async function installFromLocalArchive(ctx, opts, { extractAndIndex, snap
     }
   }
 
-  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, profile: opts.profile, yes: opts.yes })
+  const result = await extractAndIndex(ctx, archivePath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, profile: opts.profile, yes: opts.yes, fetchModels: opts.fetchModels, downloadFonts: opts.downloadFonts })
   return {
     status: 'ok',
     source: 'local-archive',

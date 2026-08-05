@@ -39,7 +39,7 @@ export async function runBodyIndex({ db, dataDir, logger, fullRebuild }) {
  * Each task is wrapped in runStep so failures stay isolated and
  * activity tracking captures per-step duration.
  */
-export async function runResourcesPhase({ ctx, logger, scope, fullRebuild = false }) {
+export async function runResourcesPhase({ ctx, logger, scope, fullRebuild = false, downloadFonts: downloadFontsOpt } = {}) {
   const failedSources = []
   let fontsResult = null
   let symbolsResult = null
@@ -57,7 +57,11 @@ export async function runResourcesPhase({ ctx, logger, scope, fullRebuild = fals
   const keepSymbols = scope?.keepSymbols !== false
   const skippedOutcome = (label) => ({ ok: true, label, result: null, ms: 0 })
 
-  const downloadFonts = process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1'
+  // The CLI passes an explicit boolean (default ON, --no-download-fonts to
+  // opt out); programmatic callers that omit it fall back to the legacy
+  // APPLE_DOCS_DOWNLOAD_FONTS env and stay offline by default (tests).
+  // downloadFileIfNeeded makes repeat runs cheap (unchanged DMGs skipped).
+  const downloadFonts = downloadFontsOpt ?? (process.env.APPLE_DOCS_DOWNLOAD_FONTS === '1')
   if (keepFonts) logger.info(`Syncing Apple typography${downloadFonts ? ' (downloading DMGs)' : ''}...`)
   else logger.info('Scope: keepFonts=false — skipping Apple fonts sync')
 

@@ -125,12 +125,16 @@ Stages: HEAD-check → discover → crawl → download → convert → Xcode-doc
 enrich → body index → fonts → SF Symbols → migrations + cleanup + minify.
 
 The enrich stage merges Xcode's offline documentation asset (symbol USRs +
-pages the public crawl can't see) when a local Xcode install provides one;
-set APPLE_DOCS_ENRICH_FETCH=1 to allow the ~650 MB CDN download instead.
+pages the public crawl can't see) — from a local Xcode install when present,
+else via a ~650 MB CDN download (cached across runs; --no-enrich-fetch skips).
 
 Options:
   --full               Force a clean rebuild from scratch
   --rate <n>           Max requests per second across roots (default: 500)
+  --no-download-fonts  Skip downloading + extracting the Apple font DMGs
+                       (on by default; unchanged DMGs are not re-downloaded).
+  --no-enrich-fetch    Skip the Xcode-docs asset CDN download when no local
+                       Xcode asset exists (on by default; asset is cached).
   --json               Output the full pipeline report as JSON
 
 Advanced (performance / auth tuning):
@@ -181,6 +185,11 @@ Options:
   --skip-resources   Skip the post-extract font + symbols re-index step
   --skip-semantic    Skip the post-extract semantic index build (lexical-only
                      search; run \`apple-docs index embeddings --full\` later)
+  --no-fetch-models  Do not download missing embedding-model files from
+                     huggingface.co (fetching is on by default and
+                     sha256-pin-verified; missing model → lexical-only).
+  --no-download-fonts  Skip downloading + extracting the Apple font DMGs
+                     (on by default; already-downloaded DMGs are reused).
   --archive <path>   Install from a local snapshot tarball (under $HOME/cwd);
                      verifies a sibling .sha256 sidecar when present.
   --json             Output results as JSON

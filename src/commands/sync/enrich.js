@@ -7,9 +7,11 @@
  * Asset resolution policy:
  *   - explicit `assetDbPath` (tests / tooling) wins;
  *   - else a locally-installed Xcode asset when present;
- *   - else the CDN download, but only when APPLE_DOCS_ENRICH_FETCH=1
- *     (the snapshot workflow sets it; a local `sync` never silently
- *     downloads the ~650 MB asset);
+ *   - else the CDN download. The CLI enables it by default
+ *     (--no-enrich-fetch opts out); programmatic callers that omit
+ *     `enrichFetch` stay offline unless APPLE_DOCS_ENRICH_FETCH=1
+ *     (the legacy env the snapshot workflow sets). The ~650 MB asset is
+ *     content-addressed and cached, so repeat syncs don't re-download;
  *   - else skip — non-fatal by design, the corpus is complete without it.
  */
 
@@ -17,7 +19,7 @@ import { runStep } from '../../lib/run-step.js'
 import { enrichFromAsset, findDocumentationAssets } from '../../sources/mobileasset-docs.js'
 import { fetchDocumentationAsset, resolveDownload } from '../../sources/mobileasset-fetch.js'
 
-export async function runEnrichPhase({ db, logger, assetDbPath = null, fullRebuild = false, findAssets = findDocumentationAssets }) {
+export async function runEnrichPhase({ db, logger, assetDbPath = null, fullRebuild = false, enrichFetch, findAssets = findDocumentationAssets }) {
   const resolveAssetDb = async () => {
     if (assetDbPath) return assetDbPath
     const local = findAssets()
@@ -25,8 +27,9 @@ export async function runEnrichPhase({ db, logger, assetDbPath = null, fullRebui
       logger.info(`Enriching from local Xcode documentation asset (${local[0].docs.toLocaleString()} pages).`)
       return local[0].dbPath
     }
-    if (process.env.APPLE_DOCS_ENRICH_FETCH !== '1') {
-      logger.info('No local Xcode documentation asset — skipping enrichment (APPLE_DOCS_ENRICH_FETCH=1 enables the CDN download).')
+    const allowFetch = enrichFetch ?? (process.env.APPLE_DOCS_ENRICH_FETCH === '1')
+    if (!allowFetch) {
+      logger.info('No local Xcode documentation asset — skipping enrichment (re-run without --no-enrich-fetch to allow the CDN download).')
       return null
     }
     const dl = await resolveDownload({})

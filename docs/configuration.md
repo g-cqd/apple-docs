@@ -146,7 +146,8 @@ requirement.
 | `APPLE_DOCS_FUSION` | `hybrid` | `rrf` reverts to rank-only weighted-RRF fusion |
 | `APPLE_DOCS_MMR` | on | `off` disables the MMR diversity pass |
 | `APPLE_DOCS_MMR_LAMBDA` | `0.7` | MMR relevance↔diversity balance (0–1) |
-| `APPLE_DOCS_ALLOW_REMOTE_MODELS` | unset | `1` lets the snapshot CI build fetch the model from HuggingFace (sha256-pinned; see `src/search/model-integrity.js`). Never needed by consumers |
+| `APPLE_DOCS_FETCH_MODELS` | `true` | Fetch missing embedding-model files from HuggingFace (sha256-pinned; see `src/search/model-integrity.js`). Disable per-run with `--no-fetch-models` on `setup` / `index embeddings` |
+| `APPLE_DOCS_ALLOW_REMOTE_MODELS` | unset | Legacy alias for `APPLE_DOCS_FETCH_MODELS`; wins when set (kept for CI scripts) |
 | `APPLE_DOCS_MODELS_DIR` | `$APPLE_DOCS_HOME/resources/models` | Override the model directory |
 
 ## Outbound HTTP (crawl)
@@ -170,8 +171,8 @@ requirement.
 | `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` README fetch or `api` (richer GitHub metadata) |
 | `APPLE_DOCS_PACKAGES_LIMIT` | unset | Cap package count during discovery |
 | `APPLE_DOCS_SKIP_RESOURCES` | `false` | Skip post-extract font + SF Symbols re-index |
-| `APPLE_DOCS_ENRICH_FETCH` | unset | `1` lets `sync`'s Xcode-docs enrichment phase download the ~650 MB asset from Apple's CDN when no local Xcode asset exists (the snapshot CI sets it; local syncs use a local asset or skip) |
-| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Force-download Apple fonts even if system-installed |
+| `APPLE_DOCS_ENRICH_FETCH` | unset | Legacy env for programmatic callers; the CLI now allows the ~650 MB Xcode-docs CDN download by default during `sync` (cached across runs; opt out with `--no-enrich-fetch`) |
+| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Legacy env for programmatic callers; the CLI now downloads font DMGs by default on `setup`/`sync` (opt out with `--no-download-fonts`) |
 | `APPLE_DOCS_SYMBOLS_OFFLINE` | `false` | Skip the live SF Symbols renderer (use bundled prerenders only) |
 
 The `packages` source defaults to a curated official allowlist and raw README

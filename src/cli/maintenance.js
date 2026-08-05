@@ -92,7 +92,13 @@ async function dispatchConsolidate(_subcommand, _positional, flags, ctx) {
 async function dispatchIndex(subcommand, positional, flags, ctx) {
   if (subcommand === 'embeddings') {
     const { indexEmbeddings } = await import('../commands/index-embeddings.js')
-    return { result: await indexEmbeddings({ full: !!flags.full }, ctx), formatter: summary('index embeddings') }
+    return {
+      result: await indexEmbeddings({
+        full: !!flags.full,
+        fetchModels: flags['no-fetch-models'] ? false : undefined,
+      }, ctx),
+      formatter: summary('index embeddings'),
+    }
   }
   if (subcommand === 'rebuild') {
     const target = positional[0] ?? 'body'

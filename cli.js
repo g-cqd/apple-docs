@@ -167,7 +167,13 @@ try {
       // --aggressive opts back into the legacy 500-in-flight default.
       // Without it, sync caps at 100 concurrent fetches (Apple's per-IP
       // limit absorbs that comfortably; 500 was an unfriendly default).
-      result = await sync({ full: !!flags.full, aggressive: !!flags.aggressive }, ctx)
+      result = await sync({
+        full: !!flags.full,
+        aggressive: !!flags.aggressive,
+        downloadFonts: !flags['no-download-fonts'],
+        enrichFetch: !flags['no-enrich-fetch'],
+        fetchModels: flags['no-fetch-models'] ? false : undefined,
+      }, ctx)
       formatter = formatSync
       break
     }
@@ -304,6 +310,10 @@ try {
         profile: setupProfile,
         beta: !!flags.beta,
         yes: !!flags.yes,
+        // Model fetching and font DMG downloads both default ON;
+        // --no-fetch-models / --no-download-fonts are the per-run opt-outs.
+        fetchModels: flags['no-fetch-models'] ? false : undefined,
+        downloadFonts: !flags['no-download-fonts'],
       }, ctx)
       formatter = formatSetup
       break

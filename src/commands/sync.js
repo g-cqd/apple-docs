@@ -90,7 +90,7 @@ export async function sync(opts, ctx) {
     // sf_symbols/apple_font_* tables and local bundles — fully disjoint from
     // the corpus phases. Start them now so their disk/Swift-worker time
     // overlaps the network-bound update+crawl phases; awaited at step 6.
-    resourcesPromise = runResourcesPhase({ ctx, logger, scope, fullRebuild })
+    resourcesPromise = runResourcesPhase({ ctx, logger, scope, fullRebuild, downloadFonts: opts.downloadFonts })
 
     // 2. HEAD-check existing pages on every source for upstream modifications.
     //    Pulls changed pages in place; deleted pages are tombstoned. Flat sources
@@ -197,7 +197,7 @@ export async function sync(opts, ctx) {
     //    pages from sources/roots that were deliberately excluded.
     const enrichResult = (ctx.adapters || scope)
       ? { skipped: true }
-      : await runEnrichPhase({ db, logger, fullRebuild })
+      : await runEnrichPhase({ db, logger, fullRebuild, enrichFetch: opts.enrichFetch })
 
     // 6. Body index + resources run concurrently. They touch disjoint tables
     //    (body index: documents_body_fts + schema_meta; resources:
@@ -222,6 +222,25 @@ export async function sync(opts, ctx) {
       { logger },
     )
     const doctorResult = doctorStep.ok ? doctorStep.result : null
+
+    // 8. Semantic embedding index — LAST, so it sees every mutation the
+    //    pipeline made (crawl, enrich-added pages, consolidate cleanups).
+    //    Incremental: new documents plus those whose updated_at advanced.
+    //    Non-fatal — a missing model degrades to lexical-only, never fails
+    //    the sync. Skipped for injected-adapter runs (tests) like enrich.
+    let embeddingsResult = { status: 'skipped' }
+    if (!ctx.adapters) {
+      const embedStep = await runStep(
+        'sync.index-embeddings',
+        async () => {
+          const { indexEmbeddings } = await import('./index-embeddings.js')
+          return indexEmbeddings({ full: fullRebuild, fetchModels: opts.fetchModels }, ctx)
+        },
+        { logger },
+      )
+      embeddingsResult = embedStep.ok ? embedStep.result : { status: 'error', message: embedStep.error.message }
+      if (embeddingsResult.status === 'error') logger.warn(`Semantic index skipped (lexical-only): ${embeddingsResult.message}`)
+    }
 
     const durationMs = Date.now() - startMs
     const totalProcessed = Object.values(crawlResults).reduce((sum, result) => sum + (result.processed ?? 0), 0)
@@ -253,6 +272,7 @@ export async function sync(opts, ctx) {
       symbols: symbolsResult,
       symbolsRender: symbolsRenderResult,
       doctor: doctorResult,
+      embeddings: embeddingsResult,
       durationMs,
     }
   } finally {

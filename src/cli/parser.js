@@ -28,6 +28,18 @@ const BOOLEAN_FLAGS = new Set([
   'incremental',
   'skip-docs',
   'yes',
+  'aggressive',
+  'beta',
+  'prebuilt',
+  'compact',
+  'skip-resources',
+  'skip-semantic',
+  'fetch-models',
+  'no-fetch-models',
+  'download-fonts',
+  'no-download-fonts',
+  'enrich-fetch',
+  'no-enrich-fetch',
 ])
 
 /**

@@ -473,7 +473,7 @@ Starter Grafana dashboards live under `ops/grafana/`; see
 | `APPLE_DOCS_API_BASE` | Apple tutorial data URL | Override Apple's DocC API base |
 | `APPLE_DOCS_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `APPLE_DOCS_SKIP_RESOURCES` | unset | Set to `1` to skip font and SF Symbols sync during `sync` |
-| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Set to `1` to download and extract Apple font DMGs during `sync` |
+| `APPLE_DOCS_DOWNLOAD_FONTS` | unset | Legacy env; the CLI downloads font DMGs by default on `setup`/`sync` — opt out with `--no-download-fonts` |
 | `GITHUB_TOKEN` / `GH_TOKEN` | unset | Required only when `APPLE_DOCS_PACKAGES_FETCH=api` |
 | `APPLE_DOCS_PACKAGES_SCOPE` | `official` | `official` (curated) or `full` (Swift Package Index catalog) |
 | `APPLE_DOCS_PACKAGES_FETCH` | `raw` | `raw` = README-only via `raw.githubusercontent.com`. `api` = GitHub REST with token (adds stars, license, topics). Degrades to `raw` if no token. |

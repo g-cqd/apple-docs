@@ -53,6 +53,20 @@ const configSchema = z.object({
   APPLE_DOCS_API_BASE: z.string().url().optional(),
   APPLE_DOCS_HOST_BUCKET_MAX: posInt().default(256),
 
+  // -- Semantic search / embedding model -----------------------------------
+  // Fetch missing embedding-model files from huggingface.co (pin-verified).
+  // On by default so a fresh install never silently loses the semantic tier;
+  // disable per-run with `--no-fetch-models` or APPLE_DOCS_FETCH_MODELS=0.
+  APPLE_DOCS_FETCH_MODELS: bool().default(true),
+  // Legacy alias (pre-dates FETCH_MODELS; CI scripts still set it). When
+  // present it wins over APPLE_DOCS_FETCH_MODELS — see embedder.js.
+  APPLE_DOCS_ALLOW_REMOTE_MODELS: bool().optional(),
+  APPLE_DOCS_SEMANTIC: z.enum(['on', 'off']).optional(),
+  APPLE_DOCS_EMBED_MODEL: z.string().optional(),
+  APPLE_DOCS_EMBED_DIMS: posInt().optional(),
+  APPLE_DOCS_MODELS_DIR: z.string().optional(),
+  APPLE_DOCS_ONNX_WASM: bool().default(false),
+
   // -- Sync ----------------------------------------------------------------
   APPLE_DOCS_SKIP_RESOURCES: bool().default(false),
   APPLE_DOCS_DOWNLOAD_FONTS: bool().optional(),

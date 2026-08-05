@@ -141,7 +141,7 @@ async function installFromGithubRelease(ctx, opts) {
     }
     logger.info('Checksum verified.')
 
-    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes })
+    const result = await extractAndIndex(ctx, tmpPath, { skipResources: opts.skipResources, skipSemantic: opts.skipSemantic, embedder: opts.embedder, tag: release.tag, profile: opts.profile, yes: opts.yes, fetchModels: opts.fetchModels, downloadFonts: opts.downloadFonts })
     return {
       status: 'ok',
       source: 'github-release',
@@ -167,7 +167,9 @@ async function installFromGithubRelease(ctx, opts) {
  * Source-specific concerns (network fetch, sidecar discovery, manifest
  * parsing) stay in the calling function.
  */
-async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, embedder, tag = null, profile = null, yes = false } = {}) {
+// downloadFonts defaults false at this layer (tests / programmatic callers
+// stay offline); the CLI passes true unless --no-download-fonts.
+async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, embedder, tag = null, profile = null, yes = false, fetchModels, downloadFonts = false } = {}) {
   const { db, dataDir, logger } = ctx
   const dbPath = join(dataDir, 'apple-docs.db')
   const isSevenZip = archivePath.endsWith('.7z')
@@ -265,7 +267,7 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
 
     if (skipResources !== true) {
       try {
-        await syncAppleFonts({ downloadFonts: false }, { db: verifyDb, dataDir, logger })
+        await syncAppleFonts({ downloadFonts: downloadFonts === true }, { db: verifyDb, dataDir, logger })
       } catch (e) {
         logger?.warn?.(`Font index refresh skipped: ${e.message}`)
       }
@@ -319,20 +321,6 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
       logger?.warn?.(`Raw payload compaction skipped (reads work either way): ${e.message}`)
     }
 
-    if (skipSemantic !== true) {
-      // Snapshots ship no vectors (GitHub asset-size headroom); the chunk
-      // index is rebuilt here from the shipped sections + model, offline.
-      // Any failure degrades to lexical-only search, never blocks install.
-      logger.info('Building semantic search index (a few minutes; skip with --skip-semantic)…')
-      try {
-        const { indexEmbeddings } = await import('./index-embeddings.js')
-        const sem = await indexEmbeddings({ full: true, embedder }, { db: verifyDb, dataDir, logger })
-        if (sem.status !== 'ok') logger.warn(`Semantic index skipped (lexical-only): ${sem.message}`)
-      } catch (e) {
-        logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${e.message}`)
-      }
-    }
-
     // Apply the storage profile explicitly — overrides whatever the snapshot
     // build host baked into snapshot_meta. Each non-default profile finishes
     // its shape in one step so the operator never has to chase setup with a
@@ -353,6 +341,22 @@ async function extractAndIndex(ctx, archivePath, { skipResources, skipSemantic, 
       const { storageCompact } = await import('./storage-compact.js')
       const compacted = await storageCompact({}, { db: verifyDb, dataDir, logger })
       logger.info(`Compacted: ${compacted.sectionsCompressed} sections compressed, ${compacted.rawDropped} raw payloads dropped.`)
+    }
+
+    if (skipSemantic !== true) {
+      // Snapshots ship no vectors (GitHub asset-size headroom); the chunk
+      // index is rebuilt here from the shipped sections + model, offline.
+      // Runs LAST — after resources, compaction, and the storage profile —
+      // so it embeds the final state of everything the install produced.
+      // Any failure degrades to lexical-only search, never blocks install.
+      logger.info('Building semantic search index (a few minutes; skip with --skip-semantic)…')
+      try {
+        const { indexEmbeddings } = await import('./index-embeddings.js')
+        const sem = await indexEmbeddings({ full: true, embedder, fetchModels }, { db: verifyDb, dataDir, logger })
+        if (sem.status !== 'ok') logger.warn(`Semantic index skipped (lexical-only): ${sem.message}`)
+      } catch (e) {
+        logger?.warn?.(`Semantic index build failed (search stays lexical-only): ${e.message}`)
+      }
     }
 
     if (tag) verifyDb.setSnapshotMeta('snapshot_tag', tag)
