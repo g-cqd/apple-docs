@@ -17,18 +17,25 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       build_macos: ${{ steps.provenance.outputs.build_macos }}
-    # Explicitly the newest GA image — GitHub's `macos-latest` label LAGS
-    # the newest releases (observed 2026-06-10: macos-latest resolved to
-    # macOS 15.7, and the snapshot's recorded buildMacos proved it). The
-    # newest image carries the newest CoreGlyphs / CoreGlyphsPrivate
-    # bundles so the snapshot ships every SF Symbol macOS has shipped to
-    # date, and its Swift toolchain exposes `vectorGlyph.drawInContext:`
-    # which our private-API SVG renderer depends on (see src/resources/
-    # symbol-pdf-to-svg.js). Catalog names the runner OS cannot draw are
-    # flagged render_unsupported and skipped by the completeness gate;
-    # anything newer than GA ships via the beta channel
-    # (scripts/publish-beta-snapshot.mjs).
-    runs-on: macos-26
+    # Explicitly the NEWEST macOS image GitHub hosts — `xcode-27` (macOS 27.0,
+    # Xcode 27.0, public preview as of 2026-09-18; see
+    # actions/runner-images#14404). GitHub's `macos-latest` label LAGS the
+    # newest releases (observed 2026-06-10: macos-latest resolved to macOS
+    # 15.7, and the snapshot's recorded buildMacos proved it; on 2026-09-18
+    # it resolved to macOS 26 while macOS 27 was already hosted under the
+    # `xcode-27` preview label). The newest image carries the newest
+    # CoreGlyphs / CoreGlyphsPrivate bundles so the snapshot ships every SF
+    # Symbol macOS has shipped to date, and its Swift toolchain exposes
+    # `vectorGlyph.drawInContext:` which our private-API SVG renderer
+    # depends on (see src/resources/symbol-pdf-to-svg.js). Catalog names
+    # the runner OS cannot draw are flagged render_unsupported and skipped
+    # by the completeness gate; anything newer than this image ships via
+    # the beta channel (scripts/publish-beta-snapshot.mjs).
+    #
+    # Preview images carry no Actions SLA and GitHub retires the `xcode-N`
+    # label once `macos-N` reaches GA — when `macos-27` appears in
+    # actions/runner-images, move this (and ci.yml + build-binaries) to it.
+    runs-on: xcode-27
     timeout-minutes: 240
     permissions:
       contents: write
@@ -40,7 +47,7 @@ jobs:
       # `zstd -9 -T3 --long=27`. The long window dedups DocC JSON across
       # documents (raw payloads are staged uncompressed for exactly this
       # reason) — measured 2183 MB → ~950 MB vs the pre-long per-blob
-      # layout, and faster to compress. `zstd` ships on macos-26 runners;
+      # layout, and faster to compress. `zstd` ships on xcode-27 runners;
       # consumers decompress in-process via Bun (long-window capable), so
       # no host `zstd` is needed.
       - name: Set data directory
@@ -54,7 +61,7 @@ jobs:
       #
       # APPLE_DOCS_DOWNLOAD_FONTS=1 enables Apple's font DMG download +
       # extraction so the snapshot ships every font Apple distributes,
-      # including those not pre-installed on the macos-26 runner. Local
+      # including those not pre-installed on the xcode-27 runner. Local
       # `apple-docs sync` runs leave this off — most workstations already
       # have SF Pro / Compact / Mono installed and the DMG fetch is slow.
       # GITHUB_TOKEN authenticates the GitHub-backed sources (swift-evolution,
@@ -121,9 +128,9 @@ jobs:
       # A mismatch fails the workflow before we publish anything.
       #
       # Runs on every trigger (schedule + workflow_dispatch). Doubles the
-      # workflow wallclock (~47 min → ~94 min on a 4-core macos-26
-      # runner), but matches the schedule-run guarantees on manual
-      # dispatches too — operators who ship a code change to the snapshot
+      # workflow wallclock (~47 min → ~94 min on a 4-core macos-26 runner;
+      # xcode-27 is the same shape), but matches the schedule-run guarantees
+      # on manual dispatches too — operators who ship a code change to the snapshot
       # pipeline get end-to-end determinism verification before publish
       # instead of waiting for the next Sunday cron.
       - name: Verify determinism
@@ -241,7 +248,9 @@ jobs:
           # No darwin-x64 leg: onnxruntime (via the optional
           # @huggingface/transformers) ships no darwin/x64 napi binding,
           # so the compile step cannot resolve it for Intel targets.
-          - os: macos-latest
+          # Same image as build-snapshot so the darwin binary is produced
+          # on the newest hosted macOS (bun cross-compiles regardless).
+          - os: xcode-27
             target: bun-darwin-arm64
             name: apple-docs-macos-arm64
           - os: ubuntu-latest
