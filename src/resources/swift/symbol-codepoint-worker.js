@@ -20,8 +20,20 @@
  *      encrypted `syls` (77 MB) + `symp` (753 KB) tables that hold the
  *      catalog name→PUA-codepoint mapping.
  *   2. For each symbol name on stdin, call
- *      `reader.symbol(forSystemName: name, preferComposite: true)`
- *      and emit `FontSymbol.pua.value` as the codepoint.
+ *      `reader.symbol(forSystemName: name, preferComposite: false)`
+ *      and emit the PUA scalar as the codepoint (`FontSymbol.pua.value`
+ *      through SF Symbols 8; `FontSymbol.metadata?.privateScalar?.value`
+ *      from SF Symbols 27, which dropped the `pua` accessor).
+ *
+ *      `preferComposite` MUST be false. Slash/badge symbols carry two PUA
+ *      scalars in SFSymbolsFallback.otf — a "composite" glyph assembled
+ *      from parts and a monolithic one — and only the monolithic scalar
+ *      exists in the SF Pro / SF Compact fonts the codepoint is consumed
+ *      with (web symbols page, font subsets). `preferComposite: true`
+ *      (the behaviour through 2026-09) stamped the composite scalar for
+ *      ~1,800 symbols, which renders as a missing glyph in SF Pro. SF
+ *      Symbols 27 exposes only the monolithic scalar anyway, so `false`
+ *      also makes every app version agree byte-for-byte.
  *
  * Why this exists: the catalog name→codepoint table is not in any
  * public Apple API. The encrypted font tables are the only on-disk
@@ -34,12 +46,11 @@
  * Coverage on macOS 26.4 + SF Symbols.app 8.0:
  *   8,302 / 8,302 public catalog names = 100%
  *
- * The interface below is matched to the CURRENT major (8). SF Symbols 8
- * added a 5th `enhancedKeywordsURL` parameter to MetadataReadingOptions.init
- * and made `fontTableDecryptor` a non-optional @escaping closure — a 7.x-shaped
- * interface JIT-fails to link against the v8 framework (symbol not found). We
- * always provision the latest app, so the interface tracks the latest major;
- * a future major that changes these signatures needs the same treatment
+ * The templates below are the SF Symbols 8 baseline; the version-adaptive
+ * section at the bottom swaps the ABI-bearing lines for other majors (≤ 7 and
+ * ≥ 27). A `.swiftinterface` must mangle byte-for-byte to what the provisioned
+ * framework exports or the script JIT-fails to link (symbol not found), so a
+ * future major that changes these signatures needs the same treatment
  * (dump with `nm -gU … | xcrun swift-demangle`, then mirror here).
  *
  * Watch the `\\t` gotcha from commit 75b507a — JS template literals
@@ -124,7 +135,7 @@ func writeLine(name: String, codepoint: UInt32?) {
 while let raw = readLine(strippingNewline: true) {
   let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
   if name.isEmpty { continue }
-  if let sym = reader.symbol(forSystemName: name, preferComposite: true) {
+  if let sym = reader.symbol(forSystemName: name, preferComposite: false) {
     writeLine(name: name, codepoint: sym.pua.value)
   } else {
     writeLine(name: name, codepoint: nil)
@@ -197,13 +208,26 @@ public struct Crypton {
 
 // ── Version-adaptive selection ──────────────────────────────────────────────
 //
-// The two exports above are the SF Symbols 8 baseline. SF Symbols ≤ 7 declared
-// a 4-parameter MetadataReadingOptions.init whose decryptor closure was OPTIONAL
-// (and no enhancedKeywordsURL). The worker must mangle to exactly what the
-// provisioned app exports, so the interface + the init call are selected by the
-// app's major version — codepoint-dump.js reads it from the bundle's
-// CFBundleShortVersionString. The drift guard throws loudly if a future edit
-// renames the v8 markers so the downgrade can't silently no-op.
+// The two exports above are the SF Symbols 8 baseline (8.x was the last
+// app-numbered release; the next major jumped to 27 to track the OS version).
+// The worker must mangle to exactly what the provisioned app exports, so the
+// interface + the Swift source are selected by the app's major version —
+// codepoint-dump.js reads it from the bundle's CFBundleShortVersionString —
+// by swapping the ABI-bearing lines of the baseline. The drift guard throws
+// loudly if a future edit renames a baseline marker so a swap can't silently
+// no-op.
+//
+//   ≤ 7    4-parameter MetadataReadingOptions.init, OPTIONAL decryptor closure,
+//          no `enhancedKeywordsURL`.
+//   8..26  baseline — 5-parameter init with an @escaping decryptor.
+//   ≥ 27   `VariableSymbolFontProvider.init(url:supportsScales:)` gained a
+//          second label and `FontSymbol.pua` was removed; the PUA scalar is
+//          read through `FontSymbol.metadata?.privateScalar` instead (same
+//          value — cross-checked against the 8.2 `pua` dump, see
+//          test/unit/resources/symbol-worker-versions.test.js).
+
+/** Newest SF Symbols.app major the templates are known to link against. */
+export const LATEST_KNOWN_SF_SYMBOLS_MAJOR = 27
 
 const V8_META_INIT = `    public init(
       fontTableDecryptor: @escaping (CoreText.CTFont, Swift.UInt32) -> Foundation.Data?,
@@ -222,21 +246,44 @@ const V7_META_INIT = `    public init(
 
 const V8_ENHANCED_ARG = ',\n  enhancedKeywordsURL: nil'
 
-function downgrade(text, marker, replacement) {
+// ≥ 27 interface swaps.
+const V8_PROVIDER_INIT = '  public init(url: Foundation.URL)'
+const V27_PROVIDER_INIT = '  public init(url: Foundation.URL, supportsScales: Swift.Bool)'
+const V8_PUA_GETTER = '  public var pua: Swift.Unicode.Scalar { get }\n'
+
+// ≥ 27 script swaps.
+const V8_PROVIDER_CALL = 'VariableSymbolFontProvider(url: fontURL)'
+const V27_PROVIDER_CALL = 'VariableSymbolFontProvider(url: fontURL, supportsScales: true)'
+const V8_PUA_READ = 'codepoint: sym.pua.value'
+const V27_PUA_READ = 'codepoint: sym.metadata?.privateScalar?.value'
+
+function swap(text, marker, replacement) {
   if (!text.includes(marker)) {
-    throw new Error('symbol-codepoint-worker: version template drifted (v8 marker not found)')
+    throw new Error('symbol-codepoint-worker: version template drifted (v8 baseline marker not found)')
   }
   return text.split(marker).join(replacement)
 }
 
 /** SFSymbolsShared `.swiftinterface` matched to the app's major version. */
 export function sfSymbolsSharedInterface(major) {
+  if (major >= 27) {
+    return swap(
+      swap(SF_SYMBOLS_SHARED_INTERFACE, V8_PROVIDER_INIT, V27_PROVIDER_INIT),
+      V8_PUA_GETTER, '',
+    )
+  }
   if (major >= 8) return SF_SYMBOLS_SHARED_INTERFACE
-  return downgrade(SF_SYMBOLS_SHARED_INTERFACE, V8_META_INIT, V7_META_INIT)
+  return swap(SF_SYMBOLS_SHARED_INTERFACE, V8_META_INIT, V7_META_INIT)
 }
 
 /** Worker Swift source matched to the app's major version. */
 export function symbolCodepointWorkerScript(major) {
+  if (major >= 27) {
+    return swap(
+      swap(SYMBOL_CODEPOINT_WORKER_SCRIPT, V8_PROVIDER_CALL, V27_PROVIDER_CALL),
+      V8_PUA_READ, V27_PUA_READ,
+    )
+  }
   if (major >= 8) return SYMBOL_CODEPOINT_WORKER_SCRIPT
-  return downgrade(SYMBOL_CODEPOINT_WORKER_SCRIPT, V8_ENHANCED_ARG, '')
+  return swap(SYMBOL_CODEPOINT_WORKER_SCRIPT, V8_ENHANCED_ARG, '')
 }
