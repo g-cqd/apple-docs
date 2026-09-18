@@ -61,11 +61,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-26 carries the latest CoreGlyphs / CoreGlyphsPrivate bundles
-        # so private-symbol code paths (renderSfSymbol, prerenderSfSymbols,
-        # symbol-pdf-to-svg) get exercised against the same Swift toolchain
-        # the snapshot workflow uses.
-        os: [ubuntu-latest, macos-26]
+        # xcode-27 (macOS 27.0 / Xcode 27.0 — the newest image GitHub hosts,
+        # preview label; see snapshot.yml for the rationale + the GA
+        # migration note) carries the latest CoreGlyphs / CoreGlyphsPrivate
+        # bundles so private-symbol code paths (renderSfSymbol,
+        # prerenderSfSymbols, symbol-pdf-to-svg) get exercised against the
+        # same Swift toolchain the snapshot workflow uses.
+        os: [ubuntu-latest, xcode-27]
     runs-on: ${{ matrix.os }}
     # Normal run is ~1 min on ubuntu and ~1.5 min on macOS; 20 leaves room
     # for a cold cache without letting a wedged run hold the group.

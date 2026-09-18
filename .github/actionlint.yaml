@@ -1,0 +1,7 @@
+# actionlint ships a static list of GitHub-hosted runner labels and does not
+# know preview images. `xcode-27` is GitHub's hosted macOS 27.0 / Xcode 27.0
+# preview (actions/runner-images#14404), used by snapshot.yml + ci.yml.
+# Drop this entry once the workflows move to the GA `macos-27` label.
+self-hosted-runner:
+  labels:
+    - xcode-27
