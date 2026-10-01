@@ -376,6 +376,36 @@ describe('snapshotBuild', () => {
     }
   })
 
+  test('stays compacted AND carries raw payloads (embed runs after the compaction)', async () => {
+    // The raw payloads are appended AFTER the VACUUM INTO swap (so the two
+    // multi-GB files never coexist). They go into an empty table as
+    // append-only inserts, so the shipped DB must still have no free pages.
+    mkdirSync(join(dataDir, 'raw-json', 'swiftui'), { recursive: true })
+    writeFileSync(join(dataDir, 'raw-json', 'swiftui', 'view.json'), JSON.stringify({ kind: 'symbol', pad: 'x'.repeat(50_000) }))
+    db.db.run('BEGIN')
+    const ins = db.db.query('INSERT INTO update_log (timestamp, root_slug, action) VALUES (?, ?, ?)')
+    for (let i = 0; i < 3000; i++) ins.run(`2026-01-01T00:00:${i}`, 'filler', 'x'.repeat(400))
+    db.db.run('COMMIT')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-embed-compact' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
+    try {
+      await extractTarZst(result.archivePath, extractDir)
+      const shipped = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
+      try {
+        expect(shipped.query('SELECT COUNT(*) AS c FROM document_raw').get().c).toBe(1)
+        expect(shipped.query('PRAGMA freelist_count').get().freelist_count).toBe(0)
+        expect(shipped.query('PRAGMA integrity_check').get().integrity_check).toBe('ok')
+      } finally {
+        shipped.close()
+      }
+      // manifest dbSize/checksum describe the FINAL file (embed included).
+      expect(result.dbSize).toBeGreaterThan(50_000)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
   test('ships a fully compacted DB (VACUUM INTO swap keeps the compaction)', async () => {
     // Bulk rows in a table the build truncates: the DELETE leaves free pages
     // in the copy, which only a VACUUM reclaims. The build compacts via

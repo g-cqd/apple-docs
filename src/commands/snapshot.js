@@ -159,33 +159,6 @@ export async function snapshotBuild(opts, ctx) {
         copyDb.run('INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)', ['build_macos', buildMacos])
       }
 
-      // 4b. Embed raw upstream payloads into the snapshot DB so the single
-      // artifact carries everything; loose raw-json files are not shipped.
-      // PLAIN TEXT, not per-blob zstd: the outer `zstd --long=27` archive
-      // pass dedups DocC JSON structure ACROSS documents and beats per-blob
-      // compression by ~4× (measured 1.3 MB vs 5.5 MB on a 40 MB sample) —
-      // per-blob encoding would hide that redundancy inside opaque frames.
-      // ~1.1 GB of near-incompressible archive bytes become ~0.3 GB.
-      // Consumers read either representation transparently
-      // (decodeSectionContent is type-directed) and `apple-docs setup`
-      // re-encodes rows per-blob after install to restore the compact
-      // at-rest footprint. Deterministic (byte-for-byte file copies).
-      const rawJsonDir = join(dataDir, 'raw-json')
-      if (existsSync(rawJsonDir)) {
-        // document_raw exists in copyDb already (v23 ran before the VACUUM INTO).
-        const ins = copyDb.query('INSERT OR REPLACE INTO document_raw(document_id, raw) VALUES (?, ?)')
-        let packed = 0
-        copyDb.run('BEGIN')
-        for (const d of copyDb.query('SELECT id, key FROM documents').all()) {
-          const p = keyPath(dataDir, 'raw-json', d.key, '.json')
-          if (!existsSync(p)) continue
-          ins.run(d.id, readFileSync(p, 'utf8'))
-          packed++
-        }
-        copyDb.run('COMMIT')
-        logger.info(`Embedded ${packed} raw payloads into the snapshot DB.`)
-      }
-
       // 4c. Null the legacy pages content columns. The persist path stopped
       // writing them (documents is the single content source; verified zero
       // production readers) — the stale copies were ~246 MB of duplicate
@@ -200,10 +173,15 @@ export async function snapshotBuild(opts, ctx) {
       // Compact the copy (reclaims the deleted embeddings, the nulled legacy
       // columns and B-tree slack) with `VACUUM INTO` a sibling file, then swap
       // it in below. An in-place `VACUUM` builds a full temp copy AND rewrites
-      // the original through a journal — ~2× the DB (~20 GB at 9.7 GB) of
-      // extra disk on top of the corpus — which tipped the xcode-27 runner into
-      // SQLITE_FULL. `VACUUM INTO` writes the compacted DB straight to its
-      // destination: ~1.2× measured, same result, no journal.
+      // the original through a journal (~2× the DB plus journal); `VACUUM INTO`
+      // writes the compacted DB straight to its destination, no journal.
+      //
+      // It runs BEFORE the raw payloads are embedded (step 4b, after the swap):
+      // at this point the DB is ~4 GB, so the working copy and its compacted
+      // sibling coexist at ~8 GB. Measured on the full corpus, vacuuming AFTER
+      // the embed held both ~10 GB files at once (+20 GB peak, the build's
+      // high-water mark). The embedded payloads are append-only inserts into
+      // an (empty) table, so they add no slack the VACUUM would have reclaimed.
       // copyDb is a raw handle with no pragmas applied — be explicit so the
       // rebuild temp never lands in RAM regardless of compile defaults.
       withFileTempStore(copyDb, () => copyDb.run(`VACUUM INTO '${vacuumedPath.replace(/'/g, "''")}'`))
@@ -214,6 +192,39 @@ export async function snapshotBuild(opts, ctx) {
     // sidecars) before the checksum / staging / tar stages need the room.
     for (const sidecar of ['', '-wal', '-shm', '-journal']) rmSync(copyPath + sidecar, { force: true })
     renameSync(vacuumedPath, copyPath)
+
+    // 4b. Embed raw upstream payloads into the (now compact) snapshot DB so the
+    // single artifact carries everything; loose raw-json files are not shipped.
+    // PLAIN TEXT, not per-blob zstd: the outer `zstd --long=27` archive
+    // pass dedups DocC JSON structure ACROSS documents and beats per-blob
+    // compression by ~4× (measured 1.3 MB vs 5.5 MB on a 40 MB sample) —
+    // per-blob encoding would hide that redundancy inside opaque frames.
+    // ~1.1 GB of near-incompressible archive bytes become ~0.3 GB.
+    // Consumers read either representation transparently
+    // (decodeSectionContent is type-directed) and `apple-docs setup`
+    // re-encodes rows per-blob after install to restore the compact
+    // at-rest footprint. Deterministic (byte-for-byte file copies).
+    // Done AFTER the compaction above so the two multi-GB files never coexist.
+    const rawJsonDir = join(dataDir, 'raw-json')
+    if (existsSync(rawJsonDir)) {
+      const rawDb = new Database(copyPath)
+      try {
+        // document_raw exists in the copy already (v23 ran before the VACUUM INTO).
+        const ins = rawDb.query('INSERT OR REPLACE INTO document_raw(document_id, raw) VALUES (?, ?)')
+        let packed = 0
+        rawDb.run('BEGIN')
+        for (const d of rawDb.query('SELECT id, key FROM documents').all()) {
+          const p = keyPath(dataDir, 'raw-json', d.key, '.json')
+          if (!existsSync(p)) continue
+          ins.run(d.id, readFileSync(p, 'utf8'))
+          packed++
+        }
+        rawDb.run('COMMIT')
+        logger.info(`Embedded ${packed} raw payloads into the snapshot DB.`)
+      } finally {
+        rawDb.close()
+      }
+    }
 
     // 5. Compute DB checksum (streamed — the copy can be many GB)
     const dbChecksum = await sha256File(copyPath)
