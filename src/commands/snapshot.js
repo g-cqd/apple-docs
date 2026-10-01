@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Database } from 'bun:sqlite'
 import { SnapshotIncompleteError, ValidationError } from '../lib/errors.js'
@@ -125,6 +125,7 @@ export async function snapshotBuild(opts, ctx) {
   // 2. Copy database via VACUUM INTO (avoids WAL issues)
   const buildDir = mkdtempSync(join(tmpdir(), 'apple-docs-snapshot-'))
   const copyPath = join(buildDir, 'apple-docs.db')
+  const vacuumedPath = join(buildDir, 'apple-docs.vacuumed.db')
 
   try {
     withFileTempStore(db.db, () => db.db.run(`VACUUM INTO '${copyPath.replace(/'/g, "''")}'`))
@@ -196,12 +197,23 @@ export async function snapshotBuild(opts, ctx) {
           min_tvos = NULL, min_visionos = NULL
       `)
 
-      // copyDb is a raw handle with no pragmas applied — be explicit so
-      // the rebuild temp never lands in RAM regardless of compile defaults.
-      withFileTempStore(copyDb, () => copyDb.run('VACUUM'))
+      // Compact the copy (reclaims the deleted embeddings, the nulled legacy
+      // columns and B-tree slack) with `VACUUM INTO` a sibling file, then swap
+      // it in below. An in-place `VACUUM` builds a full temp copy AND rewrites
+      // the original through a journal — ~2× the DB (~20 GB at 9.7 GB) of
+      // extra disk on top of the corpus — which tipped the xcode-27 runner into
+      // SQLITE_FULL. `VACUUM INTO` writes the compacted DB straight to its
+      // destination: ~1.2× measured, same result, no journal.
+      // copyDb is a raw handle with no pragmas applied — be explicit so the
+      // rebuild temp never lands in RAM regardless of compile defaults.
+      withFileTempStore(copyDb, () => copyDb.run(`VACUUM INTO '${vacuumedPath.replace(/'/g, "''")}'`))
     } finally {
       copyDb.close()
     }
+    // Swap the compacted DB in; drop the bloated intermediate (and any
+    // sidecars) before the checksum / staging / tar stages need the room.
+    for (const sidecar of ['', '-wal', '-shm', '-journal']) rmSync(copyPath + sidecar, { force: true })
+    renameSync(vacuumedPath, copyPath)
 
     // 5. Compute DB checksum (streamed — the copy can be many GB)
     const dbChecksum = await sha256File(copyPath)

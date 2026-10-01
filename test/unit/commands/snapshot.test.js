@@ -376,4 +376,33 @@ describe('snapshotBuild', () => {
     }
   })
 
+  test('ships a fully compacted DB (VACUUM INTO swap keeps the compaction)', async () => {
+    // Bulk rows in a table the build truncates: the DELETE leaves free pages
+    // in the copy, which only a VACUUM reclaims. The build compacts via
+    // `VACUUM INTO` + swap (≈1.2× disk vs ≈2× for an in-place VACUUM).
+    db.db.run('BEGIN')
+    const ins = db.db.query('INSERT INTO update_log (timestamp, root_slug, action) VALUES (?, ?, ?)')
+    for (let i = 0; i < 6000; i++) ins.run(`2026-01-01T00:00:${i}`, 'filler', 'x'.repeat(400))
+    db.db.run('COMMIT')
+
+    const result = await snapshotBuild({ out: outDir, tag: 'test-compact' }, { db, dataDir, logger })
+    const extractDir = mkdtempSync(join(tmpdir(), 'apple-docs-extract-'))
+    try {
+      await extractTarZst(result.archivePath, extractDir)
+      const shipped = new Database(join(extractDir, 'apple-docs.db'), { readonly: true })
+      try {
+        expect(shipped.query('PRAGMA freelist_count').get().freelist_count).toBe(0)
+        expect(shipped.query('PRAGMA integrity_check').get().integrity_check).toBe('ok')
+        expect(shipped.query('SELECT COUNT(*) AS c FROM update_log').get().c).toBe(0)
+        expect(shipped.query('SELECT COUNT(*) AS c FROM documents').get().c).toBe(1)
+      } finally {
+        shipped.close()
+      }
+      // manifest dbSize/checksum describe the SWAPPED-IN (compacted) file.
+      expect(result.dbSize).toBeLessThan(3 * 1024 * 1024)
+    } finally {
+      rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
 })
