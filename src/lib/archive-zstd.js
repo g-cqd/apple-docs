@@ -6,13 +6,27 @@ import { ValidationError } from "../lib/errors.js"
  * it scales on the CI runner. Higher levels (>12) trade huge time for a
  * few % more ratio — `-9` is the sweet spot.
  *
- * Pipeline: `tar -cf <tmp.tar>` then `zstd <tmp.tar> -o <out>`. We go through
- * a temp file rather than streaming `tar … | zstd …`: Bun's process plumbing
- * pumps a process-to-process pipe unreliably past one pipe buffer on Linux
- * (small archives are fine, the full corpus truncates), and Node's
- * `pipeline(tar.stdout, zstd.stdin)` throws `EINVAL … send` at multi-GB. A
- * real intermediate file sidesteps both — the same discipline the consumer
- * (setup) and the old `.tar.gz` path use.
+ * Pipeline (zstd CLI present — CI and dev machines with zstd): ONE kernel pipe
+ * `tar -cf - | zstd -o <out>` created by `bash` (never by Bun). Writing an
+ * uncompressed intermediate tar next to the output cost ~11.5 GB of peak
+ * disk on the full snapshot (the staged tree is already on disk at that
+ * point) and was what tipped the xcode-27 runner into SQLITE_FULL/ENOSPC.
+ * The historical reason for the intermediate file was Bun's own
+ * process-to-process plumbing, which pumps a pipe unreliably past one pipe
+ * buffer on Linux (small archives fine, the full corpus truncates) and Node's
+ * `pipeline(tar.stdout, zstd.stdin)` throwing `EINVAL … send` at multi-GB —
+ * a bash-owned pipe never goes through either, and `pipefail` surfaces a
+ * failure of EITHER side. The truncation guard is kept as a post-hoc
+ * decompress-and-count (`zstd -dc | tar -t | wc -l`, also bash-owned): no
+ * extra disk, ~1 s per GB.
+ *
+ * Fallback (no zstd CLI): `tar -cf <tmp.tar>` then Bun's CompressionStream —
+ * the intermediate-file discipline the consumer (setup) and the old
+ * `.tar.gz` path use. Dev machines only; the tar is verified by member count.
+ *
+ * Output note: a streamed zstd frame carries no decompressed-size field
+ * (size unknown at the pipe), so the bytes differ from the file-input form
+ * once — they stay bit-identical across reruns, which is what the gate needs.
  *
  * Determinism: paths come from `listFilesSorted` (LC_ALL=C order) fed to
  * tar via a temp listfile + `--no-recursion`; zstd output is bit-identical
@@ -64,6 +78,72 @@ async function readStderr(proc) {
   catch { return '<no stderr>' }
 }
 
+const BASH = () => Bun.which('bash') ?? '/bin/bash'
+
+/** Run `bash -c <script> bash ...args`; resolves `{ code, stdout, stderr }`. */
+async function runBash(script, args, { cwd, deadlineMs }) {
+  const proc = Bun.spawn([BASH(), '-c', script, 'bash', ...args], {
+    cwd,
+    env: { ...process.env, LC_ALL: 'C' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: deadlineMs,
+    killSignal: 'SIGKILL',
+  })
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+  return { code, stdout, stderr: await readStderr(proc) }
+}
+
+function assertMemberCount(members, expected, name) {
+  if (members !== expected) {
+    throw new ValidationError(
+      `tar.zst integrity check failed for ${name}: archive lists ${members} members but ${expected} were staged — truncated or corrupt`,
+    )
+  }
+}
+
+// $1 file list, $2 zstd, $3 output, $4.. zstd flags. `pipefail`: a tar failure
+// must fail the whole pipeline even though zstd (the last stage) exits 0.
+const STREAM_SCRIPT = 'set -o pipefail; tar -cf - --no-recursion -T "$1" | "$2" "${@:4}" -o "$3"'
+// $1 archive. Decompress + list + count entirely in the pipe — no disk.
+const VERIFY_SCRIPT = 'set -o pipefail; "$1" -dc --long=27 "$2" | tar -tf - | wc -l'
+
+async function streamTarToZstd({ sourceDir, listPath, zstdBin, absOutput, expected, name, deadlineMs }) {
+  const made = await runBash(STREAM_SCRIPT, [listPath, zstdBin, absOutput, ...ZSTD_ARGS], { cwd: sourceDir, deadlineMs })
+  if (made.code !== 0) throw new ValidationError(`tar.zst: tar|zstd pipeline exit ${made.code}: ${made.stderr}`)
+
+  // Truncation guard (was: count the intermediate tar). A short count means
+  // tar was cut short — the failure that once shipped a 199 MB (vs 1.6 GB)
+  // archive past the old gzip path.
+  const checked = await runBash(VERIFY_SCRIPT, [zstdBin, absOutput], { cwd: sourceDir, deadlineMs })
+  if (checked.code !== 0) throw new ValidationError(`tar.zst integrity check: decompress/list failed (exit ${checked.code}): ${checked.stderr}`)
+  assertMemberCount(Number.parseInt(checked.stdout.trim(), 10), expected, name)
+}
+
+async function tarThenBunZstd({ sourceDir, listPath, absOutput, expected, name, deadlineMs }) {
+  // Intermediate tar lives next to the output (same volume). Always removed.
+  const tarTmp = `${absOutput}.building.tar`
+  try {
+    if (existsSync(tarTmp)) unlinkSync(tarTmp)
+    const tarProc = Bun.spawn(['tar', '-cf', tarTmp, '--no-recursion', '-T', listPath], {
+      cwd: sourceDir,
+      env: { ...process.env, LC_ALL: 'C' },
+      stdout: 'ignore',
+      stderr: 'pipe',
+      timeout: deadlineMs,
+      killSignal: 'SIGKILL',
+    })
+    const tarCode = await tarProc.exited
+    if (tarCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarCode}: ${await readStderr(tarProc)}`)
+    assertMemberCount(await countTarMembers(tarTmp), expected, name)
+    const sink = Bun.file(absOutput).writer()
+    for await (const chunk of Bun.file(tarTmp).stream().pipeThrough(new CompressionStream('zstd'))) sink.write(chunk)
+    await sink.end()
+  } finally {
+    if (existsSync(tarTmp)) { try { unlinkSync(tarTmp) } catch { /* tolerate */ } }
+  }
+}
+
 /**
  * Create a deterministic `tar.zst` archive of `sourceDir`.
  *
@@ -87,48 +167,12 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
 
   const effectiveDeadline = deadlineMs ?? DEFAULT_DEADLINE_MS
   const zstdBin = findZstd()
-  // Intermediate tar lives next to the output (same volume, which has room for
-  // the snapshot anyway). Removed in `finally`.
-  const tarTmp = `${absOutput}.building.tar`
-
   try {
-    // 1. tar -> real file (no streaming).
-    if (existsSync(tarTmp)) unlinkSync(tarTmp)
-    const tarProc = Bun.spawn(['tar', '-cf', tarTmp, '--no-recursion', '-T', listPath], {
-      cwd: sourceDir,
-      env: { ...process.env, LC_ALL: 'C' },
-      stdout: 'ignore',
-      stderr: 'pipe',
-      timeout: effectiveDeadline,
-      killSignal: 'SIGKILL',
-    })
-    const tarCode = await tarProc.exited
-    if (tarCode !== 0) throw new ValidationError(`tar.zst: tar exit ${tarCode}: ${await readStderr(tarProc)}`)
-
-    // 2. Integrity gate: count members of the uncompressed tar. `--no-recursion
-    //    -T <files>` packs exactly one entry per listed (regular) file, so a
-    //    complete tar lists `files.length`. A short count means tar truncated —
-    //    the failure mode that silently shipped a 199 MB (vs 1.6 GB) archive
-    //    past the old gzip path. Catch it here, before compression.
-    const members = await countTarMembers(tarTmp)
-    if (members !== files.length) {
-      throw new ValidationError(
-        `tar.zst integrity check failed for ${name ?? absOutput}: tar lists ${members} members but ${files.length} were staged — truncated or corrupt`,
-      )
-    }
-
-    // 3. zstd the tar file -> output (zstd reads a real file; exit 0 ⇒ complete).
     if (zstdBin) {
-      const zstdProc = Bun.spawn([zstdBin, ...ZSTD_ARGS, '-o', absOutput, tarTmp], {
-        stdout: 'ignore', stderr: 'pipe', timeout: effectiveDeadline, killSignal: 'SIGKILL',
-      })
-      const zstdCode = await zstdProc.exited
-      if (zstdCode !== 0) throw new ValidationError(`tar.zst: zstd exit ${zstdCode}: ${await readStderr(zstdProc)}`)
+      await streamTarToZstd({ sourceDir, listPath, zstdBin, absOutput, expected: files.length, name: name ?? absOutput, deadlineMs: effectiveDeadline })
     } else {
-      log.warn?.('[archive-tar.zst] zstd CLI not found — using Bun CompressionStream (slower, single-thread)')
-      const sink = Bun.file(absOutput).writer()
-      for await (const chunk of Bun.file(tarTmp).stream().pipeThrough(new CompressionStream('zstd'))) sink.write(chunk)
-      await sink.end()
+      log.warn?.('[archive-tar.zst] zstd CLI not found — using Bun CompressionStream (slower, single-thread, intermediate tar on disk)')
+      await tarThenBunZstd({ sourceDir, listPath, absOutput, expected: files.length, name: name ?? absOutput, deadlineMs: effectiveDeadline })
     }
   } catch (err) {
     if (existsSync(absOutput)) { try { unlinkSync(absOutput) } catch { /* tolerate */ } }
@@ -136,7 +180,6 @@ export async function createTarZstArchive({ sourceDir, outputPath, name, logger,
     throw new ValidationError(`tar.zst archive build failed: ${err?.message ?? err}`)
   } finally {
     rmSync(listDir, { recursive: true, force: true })
-    if (existsSync(tarTmp)) { try { unlinkSync(tarTmp) } catch { /* tolerate */ } }
   }
 
   const stat = statSync(absOutput)

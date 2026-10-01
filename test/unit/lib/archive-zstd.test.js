@@ -109,6 +109,31 @@ describe('createTarZstArchive', () => {
     expect(threw || count !== 3).toBe(true)
   })
 
+  test('a tar failure fails the streamed pipeline (pipefail) and leaves no output', async () => {
+    // zstd, the LAST pipe stage, exits 0 on a truncated stream. Two independent
+    // layers must surface tar's failure: `set -o pipefail` on the pipeline, and
+    // the decompress-and-count guard (short member count). An unreadable member
+    // makes tar exit non-zero and skip it; either layer must reject the build.
+    if (process.getuid?.() === 0) return // root reads chmod-000 files
+    const src = stageFixture('pipefail')
+    const { chmodSync } = await import('node:fs')
+    chmodSync(join(src, 'beta.txt'), 0o000)
+    const out = join(workDir, 'pipefail.tar.zst')
+    try {
+      await expect(createTarZstArchive({ sourceDir: src, outputPath: out })).rejects.toThrow(/tar\|zstd pipeline exit|integrity/)
+      expect(existsSync(out)).toBe(false)
+    } finally {
+      chmodSync(join(src, 'beta.txt'), 0o644)
+    }
+  })
+
+  test('never leaves an intermediate .building.tar next to the output', async () => {
+    const src = stageFixture('no-intermediate')
+    const out = join(workDir, 'no-intermediate.tar.zst')
+    await createTarZstArchive({ sourceDir: src, outputPath: out })
+    expect(existsSync(`${out}.building.tar`)).toBe(false)
+  })
+
   test('refuses to archive an empty source dir', async () => {
     const src = join(workDir, 'empty')
     mkdirSync(src)
