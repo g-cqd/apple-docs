@@ -146,6 +146,12 @@ jobs:
           # match by construction.
           fail=0
           for f in dist/*.tar.zst; do
+          # Peak-disk trim (after `status`, which reports their sizes, so the
+          # published numbers are unchanged): the snapshot never stages
+          # markdown/ (regenerable on device via `storage materialize`) nor the
+          # font DMGs under resources/fonts/original (only fonts/extracted
+          # ships) — ~2.2 GB the build and the determinism rebuild never read.
+          rm -rf "$APPLE_DOCS_HOME/markdown" "$APPLE_DOCS_HOME/resources/fonts/original"
             name=$(basename "$f")
             a=$(shasum -a 256 "$f" | awk '{print $1}')
             b=$(shasum -a 256 "dist-check/$name" | awk '{print $1}')
