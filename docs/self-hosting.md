@@ -152,9 +152,11 @@ apple-docs web serve \
   you intend to expose it on the LAN.
 - `--base-url` — absolute URL used for canonical links and OpenGraph.
   Set it to whatever public hostname the user sees.
-- `--rate-limit` — opt into the general per-client-IP token bucket. It
-  is off by default; the narrower on-demand `/docs/*` upstream-fetch
-  gate stays on.
+- `--rate-limit` — apply the per-client-IP token bucket to every request,
+  including loopback. Without it the bucket still limits traffic that
+  arrives through the Cloudflare edge (`CF-Connecting-IP`/`CF-Ray`), so a
+  public instance is protected by default while local use is not throttled.
+  The narrower on-demand `/docs/*` upstream-fetch gate is always on.
 - `--metrics-port` — optional Prometheus `/metrics` listener on a
   separate loopback port.
 - `APPLE_DOCS_HOME` — path to the corpus. Default `~/.apple-docs`.
@@ -192,18 +194,26 @@ Endpoints:
 | Path | Method | Purpose |
 | --- | --- | --- |
 | `/mcp` | `POST` | JSON-RPC requests |
-| `/mcp` | `GET` | Server-initiated SSE stream |
-| `/mcp` | `DELETE` | Terminate a session |
+| `/mcp` | `GET`, `DELETE` | `405 Method Not Allowed` (`Allow: POST, OPTIONS`): the server is stateless and offers no SSE stream or sessions |
 | `/healthz` | `GET` | Liveness probe |
 | `/readyz` | `GET` | DB and reader-pool readiness probe |
 
+JSON-RPC batches are rejected with a single `-32600` error (batching was
+removed in MCP 2025-06-18). A batch is accepted only from a client that
+sends `MCP-Protocol-Version` older than `2025-06-18`; an empty batch is
+always rejected.
+
 If `APPLE_DOCS_MCP_CACHE_STATS=1`, `/healthz` also reports per-tool
-cache hit ratios and reader-pool depth — wire it into your probes.
+cache hit ratios and reader-pool depth to **local** callers — wire it into
+your probes. Requests that came through the Cloudflare edge
+(`CF-Connecting-IP` or `CF-Ray` present) always get the minimal body
+(`{ok, service}` on `/healthz`, `{ok}` on `/readyz`).
 
 ## Reverse proxy (Caddy example)
 
 Minimal Caddyfile that fronts the MCP server with a health-gated
-upstream and keeps long-polled SSE alive:
+upstream. No streaming settings are needed: the server answers every
+request with one buffered JSON body.
 
 ```caddy
 {
@@ -224,10 +234,6 @@ http://apple-docs-mcp.example.com:3031, http://127.0.0.1:3031 {
         health_fails 3
         fail_duration 5s
         max_fails 3
-
-        # Keep long-polled SSE (GET /mcp) alive.
-        stream_timeout 24h
-        stream_close_delay 5m
     }
 }
 ```
@@ -258,8 +264,8 @@ cloudflared tunnel --config ~/.cloudflared/config-mcp.yml run apple-docs-mcp
 ```
 
 The tunnel is outbound, so the host needs no inbound firewall rules.
-`TUNNEL_ORIGIN_ENABLE_HTTP2=true` as an env var is worth setting for
-MCP SSE streams.
+`TUNNEL_ORIGIN_ENABLE_HTTP2=true` as an env var lets the tunnel
+multiplex requests over one connection to the origin.
 
 If you do not want to use Cloudflare: Tailscale Funnel, ngrok, frp, or
 a classic reverse-proxy-with-TLS all work the same way — point them at
@@ -484,9 +490,9 @@ Starter Grafana dashboards live under `ops/grafana/`; see
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APPLE_DOCS_WEB_HOST` | `127.0.0.1` | Default bind host for `web serve` |
-| `APPLE_DOCS_WEB_RATE_LIMIT` | unset | Set to `1` to enable the general web rate limiter |
-| `APPLE_DOCS_WEB_RATE` | `60` | Web rate-limiter rate when enabled |
-| `APPLE_DOCS_WEB_BURST` | `120` | Web rate-limiter burst when enabled |
+| `APPLE_DOCS_WEB_RATE_LIMIT` | unset (edge traffic only) | `1` limits every request, `0` disables the limiter |
+| `APPLE_DOCS_WEB_RATE` | `2` | Sustained requests per second per visitor (setting it implies `1`) |
+| `APPLE_DOCS_WEB_BURST` | `60` | Burst size per visitor (setting it implies `1`) |
 | `APPLE_DOCS_SYMBOLS_OFFLINE` | unset | Set to `1` to require pre-rendered SF Symbol assets and fail missing live renders loudly |
 
 ### MCP HTTP server

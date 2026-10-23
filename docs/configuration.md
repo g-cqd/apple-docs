@@ -232,8 +232,8 @@ is available and degrades to raw README fetching when it is not.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `APPLE_DOCS_WEB_HOST` | `127.0.0.1` | Bind address (pass `0.0.0.0` for LAN reach) |
-| `APPLE_DOCS_WEB_RATE` / `APPLE_DOCS_WEB_BURST` | `60` / `120` | Per-IP rate-limit defaults |
-| `APPLE_DOCS_WEB_RATE_LIMIT` | `false` | Enable per-IP rate limit (off by default; CLI `--rate-limit` overrides) |
+| `APPLE_DOCS_WEB_RATE` / `APPLE_DOCS_WEB_BURST` | `2` / `60` | Per-visitor sustained requests per second and burst; setting either limits every request |
+| `APPLE_DOCS_WEB_RATE_LIMIT` | unset | Unset limits traffic from the Cloudflare edge only; `1` limits every request (CLI `--rate-limit` does the same); `0` disables |
 | `APPLE_DOCS_CONTENT_SIGNAL` | `search=yes, ai-input=yes, ai-train=yes` | AI-usage content-signal policy emitted in `robots.txt`, the `_headers` file, and the `Content-Signal` response header |
 | `APPLE_DOCS_WEB_DEEP_INFLIGHT` / `APPLE_DOCS_WEB_DEEP_QUEUE` | `4` / `8` | Deep-search gate sizing |
 | `APPLE_DOCS_WEB_READERS` / `APPLE_DOCS_WEB_DEEP_READERS` / `APPLE_DOCS_WEB_READER_WORKERS` | runtime-derived | Reader-pool sizing |

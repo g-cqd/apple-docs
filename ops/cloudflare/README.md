@@ -98,14 +98,19 @@ JSON data blocks as `type="application/json"`, which browsers do not execute.
 
 Free Plan allows up to 5 custom rules and 1 rate-limiting rule.
 
-### 3.1 Rate limit `/api/search` (rate-limiting tab)
-- **If**: URI Path equals `/api/search`
+### 3.1 Rate limit `/api/*` and `/mcp` (rate-limiting tab)
+- **If**: URI Path starts with `/api/` **or** URI Path equals `/mcp` (apply to both hostnames; the Free plan allows one rule, so use a single expression).
 - **Then**: Block (or Managed Challenge) when more than **60 requests in 60 seconds** from the same IP.
 - **Mitigation timeout**: 60 seconds.
 
-This protects the only public high-frequency path that touches the SQLite
-query plan before the edge cache is warm. HTML, sitemaps, search artifacts,
-and repeated search/filter responses are CDN-cached after warmup.
+This protects the paths that touch the SQLite query plan before the edge
+cache is warm. HTML, sitemaps, search artifacts, and repeated search/filter
+responses are CDN-cached after warmup.
+
+The app enforces its own, tighter per-visitor limit on edge traffic by
+default (2 requests/s sustained, burst 60; `APPLE_DOCS_WEB_RATE_LIMIT`,
+`APPLE_DOCS_MCP_RATE_LIMIT`, `*_RATE`, `*_BURST`). The edge rule is the first
+line, because it rejects abusive traffic before it crosses the tunnel.
 
 ### 3.2 (Optional) Custom rule `block-empty-ua`
 - **If**: HTTP User-Agent contains the empty string (i.e. UA is missing) AND URI Path does not start with `/healthz` AND URI Path does not start with `/readyz`
@@ -169,3 +174,28 @@ External grading:
 - `https://securityheaders.com/?q=apple-docs.everest.mt` — target grade A
 - `https://www.ssllabs.com/ssltest/analyze.html?d=apple-docs.everest.mt` — target A+
 - Submit the sitemap-index to Google Search Console and Bing Webmaster Tools.
+
+---
+
+## 6. Origin-side defaults and dashboard-only drift
+
+The 2026-10-23 penetration test found settings that this README describes but
+the live zone did not apply, and one that only the dashboard can change.
+Origin-side fixes are in the repo; the rest needs the dashboard.
+
+| Finding | Origin (repo) | Dashboard action |
+| --- | --- | --- |
+| HSTS missing | `Caddyfile.tpl` sends `Strict-Transport-Security: max-age=31536000` on both vhosts (no `includeSubDomains`/`preload`). | Optional: apply rule 2.1 (`includeSubDomains; preload`) only after every subdomain of the zone is HTTPS-only. |
+| `Expect-CT` header | Not set by the origin. | Cloudflare injects this retired header; it disappears when HSTS is enabled in SSL/TLS → Edge Certificates → HSTS. |
+| CSP missing on static HTML | `Caddyfile.tpl` sends the same CSP as the Bun server (rendered from `src/web/csp.js`, including the 404-page script hash). | None; keep any edge CSP report-only (2.5) so it cannot conflict. |
+| `security.txt` expired | `src/web/public/.well-known/security.txt` is current and a test fails 14 days before `Expires`. The static copy on the origin was correct. | The expired two-field file is served by Cloudflare, not the origin. Open Security → Settings → Security.txt and update or remove the Cloudflare-managed file so the origin copy is served. |
+| No rate limiting | App-level per-visitor limit on edge traffic (above). | Apply rule 3.1. |
+
+Verify:
+
+```sh
+curl -sI https://apple-docs.everest.mt/ | grep -iE 'strict-transport|content-security|expect-ct'
+curl -s  https://apple-docs.everest.mt/.well-known/security.txt   # expect Expires in the future and a Policy line
+curl -s  https://apple-docs.everest.mt/readyz                     # expect exactly {"ok":true}
+curl -s -o /dev/null -w '%{http_code}\n' -X GET https://apple-docs-mcp.everest.mt/mcp   # expect 405
+```
