@@ -1,6 +1,16 @@
 name: Setup
 description: Install Bun, cache dependencies, and run frozen install. Requires actions/checkout to have run first.
 
+inputs:
+  frozen-lockfile:
+    description: >-
+      Pass --frozen-lockfile to `bun install`. Set to 'false' for
+      Dependabot branches: Dependabot bumps package.json but does not
+      regenerate bun.lock, so every one of its PRs failed at install with
+      "lockfile had changes, but lockfile is frozen" (observed on #23).
+    required: false
+    default: 'true'
+
 runs:
   using: composite
   steps:
@@ -16,4 +26,12 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: bun install --frozen-lockfile
+      env:
+        FROZEN: ${{ inputs.frozen-lockfile }}
+      run: |
+        if [ "$FROZEN" = "false" ]; then
+          echo "::notice::installing without --frozen-lockfile (Dependabot branch); bun.lock must be regenerated before merge"
+          bun install
+        else
+          bun install --frozen-lockfile
+        fi

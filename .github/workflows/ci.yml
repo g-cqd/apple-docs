@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly, Mondays 05:30 UTC — before Dependabot's 06:00/06:30 runs, so
+    # a fresh advisory shows up as a red `audit` job on main the same
+    # morning the fix PR arrives.
+    - cron: '30 5 * * 1'
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,6 +18,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Dependabot bumps package.json but does not regenerate bun.lock, so a
+  # frozen install can never pass on its branches. Relax it there only;
+  # every human branch and main still get the frozen guarantee.
+  FROZEN_LOCKFILE: ${{ github.actor != 'dependabot[bot]' }}
 
 jobs:
   quality:
@@ -25,6 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          frozen-lockfile: ${{ env.FROZEN_LOCKFILE }}
 
       - name: Lint (Biome)
         run: bun run lint
@@ -46,9 +60,6 @@ jobs:
       - name: File-size budget
         run: bun run lint:size
 
-      - name: Dependency audit
-        run: bun audit
-
       - name: Upload quality reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -56,6 +67,24 @@ jobs:
           name: quality-reports
           path: reports/
           retention-days: 30
+
+  # Dependency audit lives in its own job and only runs against main
+  # (push / schedule / dispatch), never on pull requests. Inside `quality`
+  # it made CI time-dependent: the moment an advisory was published, every
+  # commit failed regardless of what it changed (2026-09-18 runner-image
+  # commit), and every PR branch behind main stayed red until rebased
+  # (Dependabot #22, #23). A new advisory is still surfaced — as a red
+  # `audit` job on main, which is where the override bump lands anyway.
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+
+      - name: Dependency audit
+        run: bun audit
 
   test:
     strategy:
@@ -77,6 +106,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          frozen-lockfile: ${{ env.FROZEN_LOCKFILE }}
 
       - name: Run tests with coverage
         run: bun test --coverage --isolate
