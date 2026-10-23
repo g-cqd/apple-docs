@@ -2,6 +2,7 @@ import { search } from '../../commands/search.js'
 import { jsonResponse, API_CORPUS_CACHE_CONTROL } from '../responses.js'
 import { BackpressureError, Semaphore } from '../../lib/semaphore.js'
 import { projectSearchResult } from '../../output/projection.js'
+import { parseSearchParams } from './search-params.js'
 
 /**
  * Bounded concurrency for explicit `deep=1` search requests.
@@ -40,12 +41,19 @@ function parsePositiveInt(value) {
  * @type {import('../route-registry.js').RouteHandler}
  */
 export async function searchHandler(_request, ctx, url) {
+  const parsed = parseSearchParams(url.searchParams)
+  if (!parsed.ok) {
+    return jsonResponse(
+      { error: 'invalid_parameter', parameter: parsed.parameter, message: parsed.message },
+      { status: 400, headers: { 'Cache-Control': 'no-store' } },
+    )
+  }
   const query = url.searchParams.get('q')
   if (!query) return jsonResponse({ query: '', total: 0, results: [] })
   const deep = url.searchParams.get('deep') === '1' || url.searchParams.get('full_text') === '1'
   const searchOpts = {
     query,
-    limit: Math.min(Number.parseInt(url.searchParams.get('limit') ?? '50', 10) || 50, 200),
+    limit: parsed.limit,
     fuzzy: url.searchParams.get('fuzzy') === '1' && url.searchParams.get('no_fuzzy') !== '1',
     noDeep: url.searchParams.get('no_deep') === '1' || !deep,
     noEager: url.searchParams.get('no_eager') === '1',
@@ -59,12 +67,10 @@ export async function searchHandler(_request, ctx, url) {
     const val = url.searchParams.get(key)
     if (val) searchOpts[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = val
   }
-  const year = url.searchParams.get('year')
-  if (year) searchOpts.year = Number.parseInt(year, 10)
+  if (parsed.year !== null) searchOpts.year = parsed.year
   const track = url.searchParams.get('track')
   if (track) searchOpts.track = track
-  const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0
-  if (offset > 0) searchOpts.offset = offset
+  if (parsed.offset > 0) searchOpts.offset = parsed.offset
 
   const { searchCache, searchCtx, corpusStamp } = ctx
   const cacheKey = searchResponseCacheKey(searchOpts, corpusStamp.get())

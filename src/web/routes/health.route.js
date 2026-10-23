@@ -1,6 +1,7 @@
 import { jsonResponse } from '../responses.js'
 import { VERSION } from '../../lib/version.js'
 import { getCommitHash } from '../../lib/git-version.js'
+import { isEdgeRequest } from '../../lib/http-edge.js'
 
 // Resolved once at module load (getCommitHash memoizes, but hoisting it
 // keeps the liveness handler free of even one-time subprocess work).
@@ -9,16 +10,16 @@ const COMMIT = getCommitHash()
 /**
  * Liveness probe. Must not touch the DB or any cache so a stuck request
  * handler does not also fail the upstream health check. `no-store` so a
- * cached 200 cannot mask a wedged origin. Carries the code identity
- * (version + commit) so "what is this instance running" is one curl away.
+ * cached 200 cannot mask a wedged origin. Local callers also get the commit
+ * so "what is this instance running" is one curl away; public (edge)
+ * callers get only `{ok, service, version}`.
  *
  * @type {import('../route-registry.js').RouteHandler}
  */
-export function healthHandler() {
-  return jsonResponse(
-    { ok: true, service: 'apple-docs-web', version: VERSION, commit: COMMIT },
-    { headers: { 'Cache-Control': 'no-store' } },
-  )
+export function healthHandler(request) {
+  const body = { ok: true, service: 'apple-docs-web', version: VERSION }
+  if (!isEdgeRequest(request)) body.commit = COMMIT
+  return jsonResponse(body, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 /**
@@ -27,9 +28,13 @@ export function healthHandler() {
  * otherwise so a load balancer can route around a wedged instance even
  * when the process is otherwise responsive.
  *
+ * Public (edge) callers get only `{ok}`: the reader-pool sizes, timeouts and
+ * backpressure counters are a capacity-planning aid for an attacker. Local
+ * callers (the watchdog, operators) get the full body.
+ *
  * @type {import('../route-registry.js').RouteHandler}
  */
-export function readinessHandler(_request, ctx) {
+export function readinessHandler(request, ctx) {
   let dbOk = false
   try {
     ctx.db?.db?.query('SELECT 1').get()
@@ -49,13 +54,13 @@ export function readinessHandler(_request, ctx) {
     }
   }
   const ready = dbOk && readerOk
-  return jsonResponse(
-    {
-      ok: ready,
-      service: 'apple-docs-web',
-      db: dbOk,
-      readerPool: ctx.readerPool ? { ok: readerOk, stats: readerStats } : null,
-    },
-    { status: ready ? 200 : 503, headers: { 'Cache-Control': 'no-store' } },
-  )
+  const body = isEdgeRequest(request)
+    ? { ok: ready }
+    : {
+        ok: ready,
+        service: 'apple-docs-web',
+        db: dbOk,
+        readerPool: ctx.readerPool ? { ok: readerOk, stats: readerStats } : null,
+      }
+  return jsonResponse(body, { status: ready ? 200 : 503, headers: { 'Cache-Control': 'no-store' } })
 }

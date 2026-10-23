@@ -348,6 +348,46 @@ describe('Dev Server (P7-E)', () => {
     expect(data.results).toBeDefined()
   })
 
+  test.each([
+    ['limit=-1', 'limit'],
+    ['limit=abc', 'limit'],
+    ['offset=-5', 'offset'],
+    [`q=${'a'.repeat(5000)}`, 'q'],
+  ])('/api/search rejects malformed input (%#) with 400 and does not cache it', async (extra, parameter) => {
+    const query = extra.startsWith('q=') ? extra : `q=View&${extra}`
+    const res = await fetch(`${serverInfo.url}/api/search?${query}`)
+    expect(res.status).toBe(400)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(await res.json()).toMatchObject({ error: 'invalid_parameter', parameter })
+  })
+
+  test('/healthz and /readyz expose only minimal bodies to edge callers', async () => {
+    const edge = { 'cf-connecting-ip': '198.51.100.7', 'cf-ray': 'test-ray' }
+    const health = await (await fetch(`${serverInfo.url}/healthz`, { headers: edge })).json()
+    expect(Object.keys(health).sort()).toEqual(['ok', 'service', 'version'])
+    const ready = await fetch(`${serverInfo.url}/readyz`, { headers: edge })
+    expect(await ready.json()).toEqual({ ok: true })
+    const local = await (await fetch(`${serverInfo.url}/readyz`)).json()
+    expect(local.db).toBe(true)
+  })
+
+  test('edge traffic is rate limited per visitor with 429 + Retry-After; local traffic is not', async () => {
+    const edge = { 'cf-connecting-ip': '198.51.100.99', 'cf-ray': 'test-ray' }
+    let limited = null
+    for (let i = 0; i < 90 && !limited; i++) {
+      const res = await fetch(`${serverInfo.url}/api/filters`, { headers: edge })
+      if (res.status === 429) limited = res
+    }
+    expect(limited).not.toBeNull()
+    expect(Number(limited.headers.get('retry-after'))).toBeGreaterThanOrEqual(1)
+    const otherVisitor = await fetch(`${serverInfo.url}/api/filters`, { headers: { ...edge, 'cf-connecting-ip': '198.51.100.100' } })
+    expect(otherVisitor.status).toBe(200)
+    const local = await fetch(`${serverInfo.url}/api/filters`)
+    expect(local.status).toBe(200)
+    const probe = await fetch(`${serverInfo.url}/healthz`, { headers: edge })
+    expect(probe.status).toBe(200)
+  })
+
   test('live search API caches identical responses in-process', async () => {
     const first = await fetch(`${serverInfo.url}/api/search?q=View&limit=10`)
     const second = await fetch(`${serverInfo.url}/api/search?q=View&limit=10`)
