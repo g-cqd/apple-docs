@@ -11,6 +11,17 @@
 	}
 }
 
+# Security headers for responses Caddy serves itself (static files, 404
+# page). The Bun backend sets the same CSP on its own responses. The CSP is
+# rendered from src/web/csp.js (ops render-all), so its inline-script hash
+# always matches the page. HSTS is sent without includeSubDomains/preload:
+# this zone's other subdomains are not known to be HTTPS-only. Browsers
+# ignore it on the plain-HTTP loopback listener; Cloudflare terminates TLS.
+(security_headers) {
+	header Content-Security-Policy "${CSP_HEADER}"
+	header Strict-Transport-Security "max-age=31536000"
+}
+
 # ----------------------------------------------------------------------------
 # Web vhost — static site primary, Bun fallback for /api, /healthz, /readyz,
 # and on-demand /docs/* renders.
@@ -50,6 +61,8 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	# directive, because Lighthouse's REP validator flags the latter
 	# as "Unknown directive". Same payload either way.
 	header Content-Signal "search=yes, ai-input=yes, ai-train=yes"
+
+	import security_headers
 
 	# RFC 8288 Link header — advertise the sitemap, RFC 9727 API catalog,
 	# human docs, and OpenSearch endpoint to agents on every response. The
@@ -154,6 +167,7 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 	# on the search page pre-filled with the inferred title rather than a
 	# blank Caddy default page.
 	handle_errors {
+		import security_headers
 		@404 expression {http.error.status_code} == 404
 		rewrite @404 /404.html
 		file_server
@@ -161,11 +175,15 @@ http://${PUBLIC_WEB_HOST}:${WEB_PORT}, http://127.0.0.1:${WEB_PORT} {
 }
 
 # ----------------------------------------------------------------------------
-# MCP vhost — unchanged. The MCP server is small and stateless; static hosting
-# does not apply.
+# MCP vhost. The MCP server is small and stateless; static hosting does not
+# apply. It offers no SSE stream (GET and DELETE on /mcp answer 405), so no
+# long-lived streaming settings are needed here.
 # ----------------------------------------------------------------------------
 http://${PUBLIC_MCP_HOST}:${MCP_PORT}, http://127.0.0.1:${MCP_PORT} {
 	bind 127.0.0.1
+
+	# JSON only; HSTS applies, a CSP does not (no documents are served).
+	header Strict-Transport-Security "max-age=31536000"
 
 	reverse_proxy 127.0.0.1:${MCP_BACKEND_PORT} {
 		header_up Accept-Encoding identity
@@ -182,8 +200,5 @@ http://${PUBLIC_MCP_HOST}:${MCP_PORT}, http://127.0.0.1:${MCP_PORT} {
 		# a wider window causes user-facing outages for every burst.
 		fail_duration 5s
 		max_fails 3
-		# Keep long-polled SSE (`GET /mcp`) alive.
-		stream_timeout 24h
-		stream_close_delay 5m
 	}
 }

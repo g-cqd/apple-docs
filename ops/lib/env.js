@@ -14,6 +14,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve as pathResolve } from 'node:path'
 import { userInfo } from 'node:os'
+import { buildCsp } from '../../src/web/csp.js'
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -36,7 +37,7 @@ export const DERIVED_NAMES = Object.freeze([
   'LABEL_TUNNEL_WEB', 'LABEL_TUNNEL_MCP', 'LABEL_WATCHDOG', 'LABEL_AUTOROLL',
   'AUTOROLL_WEEKDAY', 'AUTOROLL_HOUR',
   'STATIC_DIR', 'APPLE_DOCS_MCP_CACHE_SCALE', 'LEGACY_LAUNCHD_LABELS',
-  'SNAPSHOT_CHANNEL',
+  'SNAPSHOT_CHANNEL', 'CSP_HEADER', 'SANDBOX_SERVE',
 ])
 
 export class EnvLoadError extends Error {
@@ -208,6 +209,19 @@ function applyDerived(vars) {
   vars.STATIC_DIR = vars.STATIC_DIR || `${vars.REPO_DIR}/dist/web`
   vars.APPLE_DOCS_MCP_CACHE_SCALE = vars.APPLE_DOCS_MCP_CACHE_SCALE || '1'
   vars.LEGACY_LAUNCHD_LABELS = vars.LEGACY_LAUNCHD_LABELS || ''
+  // Content-Security-Policy for the static files Caddy serves directly. Built
+  // from the same module the Bun server uses, so the inline-script hash
+  // cannot drift between the two paths.
+  vars.CSP_HEADER = buildCsp()
+  // Seatbelt sandbox for the long-running web and MCP servers (not for
+  // setup, deploy or sync). Default on; `off` is an escape hatch.
+  vars.SANDBOX_SERVE = vars.SANDBOX_SERVE || 'on'
+  if (vars.SANDBOX_SERVE !== 'on' && vars.SANDBOX_SERVE !== 'off') {
+    throw new EnvLoadError(
+      `SANDBOX_SERVE must be "on" or "off", got "${vars.SANDBOX_SERVE}"`,
+      { code: 'bad-sandbox' },
+    )
+  }
   // Snapshot update channel: 'stable' tracks /releases/latest (GitHub
   // hides prereleases there); 'beta' also considers prereleases under the
   // macOS-base policy implemented in src/commands/setup/helpers.js.

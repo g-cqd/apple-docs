@@ -185,3 +185,33 @@ describe('SNAPSHOT_CHANNEL', () => {
     })).toThrow(EnvLoadError)
   })
 })
+
+describe('CSP_HEADER (pentest F7)', () => {
+  const load = () => loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: envText(minimalEnv()) }) })
+
+  test('is derived from the same policy the Bun server sends, including the inline-script hash', async () => {
+    const { buildCsp } = await import('../../../src/web/csp.js')
+    expect(load().vars.CSP_HEADER).toBe(buildCsp())
+    expect(load().vars.CSP_HEADER).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/=]+'/)
+  })
+
+  test('contains no character that would break a double-quoted Caddyfile string', () => {
+    expect(load().vars.CSP_HEADER).not.toMatch(/["`{}\\\n]/)
+  })
+})
+
+describe('SANDBOX_SERVE', () => {
+  const load = (extra) => loadEnv({ path: '/fake/.env', deps: fakeDeps({ fileText: envText(minimalEnv(extra)) }) })
+
+  test('defaults to on', () => {
+    expect(load().vars.SANDBOX_SERVE).toBe('on')
+  })
+
+  test('accepts an explicit off', () => {
+    expect(load({ SANDBOX_SERVE: 'off' }).vars.SANDBOX_SERVE).toBe('off')
+  })
+
+  test.each(['yes', 'true', '1', 'ON'])('rejects %p so a typo cannot silently disable the sandbox', (value) => {
+    expect(() => load({ SANDBOX_SERVE: value })).toThrow(EnvLoadError)
+  })
+})
