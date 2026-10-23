@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { createRateLimiter, tooManyRequestsResponse } from '../../../src/web/middleware/rate-limit.js'
+import { createRateLimiter, tooManyRequestsResponse } from '../../../src/lib/ip-rate-limiter.js'
 
 function makeReq({ ip = '1.2.3.4', forwarded = null } = {}) {
   const headers = forwarded ? { 'x-forwarded-for': forwarded } : {}

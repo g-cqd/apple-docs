@@ -1,5 +1,5 @@
 /**
- * Per-IP token-bucket rate limiter for the public web server.
+ * Per-IP token-bucket rate limiter for the public web and MCP servers.
  *
  * Keeps the read path open while bounding the work per IP. The docs
  * handler would otherwise be an SSRF amplifier (anyone reachable on
@@ -11,27 +11,17 @@
  *   - docs   (5 req/min, burst 5)   — extra-strict layer for the
  *                                     on-demand-fetch /docs/<path> route.
  *
- * IP resolution prefers X-Forwarded-For (Cloudflare / Caddy upstream)
- * and falls back to server.requestIP() for direct-served deployments.
+ * IP resolution (lib/http-edge.js) prefers CF-Connecting-IP, then
+ * X-Forwarded-For, and falls back to server.requestIP() for direct-served
+ * deployments.
  *
  * Buckets live in an LRU keyed on IP — capped so a flood of unique
  * source IPs (botnet, scan) can't grow the table without bound.
  */
 
-const DEFAULT_LRU_CAP = 4096
+import { resolveClientIp } from './http-edge.js'
 
-function resolveIp(request, server) {
-  const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim()
-    if (first) return first
-  }
-  try {
-    return server?.requestIP?.(request)?.address ?? 'unknown'
-  } catch {
-    return 'unknown'
-  }
-}
+const DEFAULT_LRU_CAP = 4096
 
 /**
  * @param {{ rate?: number, burst?: number, lruCap?: number, name?: string }} [opts]
@@ -82,7 +72,7 @@ export function createRateLimiter(opts = {}) {
      * @param {{ requestIP?: (req: Request) => { address: string } | null }} [server]
      */
     take(request, server) {
-      return refillAndTake(resolveIp(request, server))
+      return refillAndTake(resolveClientIp(request, server))
     },
     /** Test-only / observability: current bucket count. */
     _size() { return buckets.size },

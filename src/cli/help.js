@@ -279,7 +279,7 @@ Serve options:
   --port <n>           Port number (default: 3000)
   --host <addr>        Bind address (default: 127.0.0.1; pass 0.0.0.0 for LAN
                        reach). Also: APPLE_DOCS_WEB_HOST=<addr>.
-  --rate-limit         Enable per-client-IP token-bucket gate (off by default).
+  --rate-limit         Apply the per-client-IP token bucket to every request (default: edge traffic only).
                        Tune via APPLE_DOCS_WEB_RATE / APPLE_DOCS_WEB_BURST,
                        or set APPLE_DOCS_WEB_RATE_LIMIT=1.
   --base-url <url>     Base URL prefix for links

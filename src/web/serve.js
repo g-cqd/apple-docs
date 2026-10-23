@@ -2,7 +2,8 @@ import { rm } from 'node:fs/promises'
 import { notFoundResponse, finalizeResponse } from './responses.js'
 import { createWebContext } from './context.js'
 import { createRouteRegistry } from './route-registry.js'
-import { createRateLimiter, tooManyRequestsResponse } from './middleware/rate-limit.js'
+import { createRateLimiter, tooManyRequestsResponse } from '../lib/ip-rate-limiter.js'
+import { createEdgeRateGate, resolveRateGateConfig } from '../lib/edge-rate-gate.js'
 import { createObservability } from './middleware/observability.js'
 import { maybeStartWebMetricsServer } from './metrics-provider.js'
 import { createEventLoopLagSampler } from '../lib/event-loop-lag.js'
@@ -62,27 +63,20 @@ export async function startDevServer(opts, ctx) {
   const webCtx = await createWebContext(opts, ctx)
   const { logger, siteConfig, readerPool, securityHeaders, gzipCache } = webCtx
 
-  // Per-client-IP token-bucket gate. Disabled by default — most deployments
-  // front the dev server with Caddy / Cloudflare, which handle abuse
-  // controls upstream. Enable explicitly via:
-  //   APPLE_DOCS_WEB_RATE_LIMIT=1
-  //   APPLE_DOCS_WEB_RATE=<rps>   (also implies on)
-  //   APPLE_DOCS_WEB_BURST=<n>    (also implies on)
-  //   opts.rateLimit === true
-  // The strict 5/min limit on the /docs/<key> on-demand-fetch path lives
-  // inside docs.route.js and is independent — that's a specific SSRF
-  // amplifier control, not general rate limiting.
-  const rateLimitOptIn = opts.rateLimit === true
-    || process.env.APPLE_DOCS_WEB_RATE_LIMIT === '1'
-    || process.env.APPLE_DOCS_WEB_RATE != null
-    || process.env.APPLE_DOCS_WEB_BURST != null
-  const defaultLimiter = rateLimitOptIn
-    ? createRateLimiter({
-        rate: parsePositiveNumber(process.env.APPLE_DOCS_WEB_RATE) ?? 60,
-        burst: parsePositiveNumber(process.env.APPLE_DOCS_WEB_BURST) ?? 120,
-        name: 'web',
-      })
-    : null
+  // Per-client-IP token-bucket gate. On by default for traffic that came
+  // through the Cloudflare edge (the public instance); local traffic —
+  // operator probes, the watchdog, benchmarks — is not limited. Controls:
+  //   APPLE_DOCS_WEB_RATE_LIMIT=0   never limit
+  //   APPLE_DOCS_WEB_RATE_LIMIT=1   limit every request (also opts.rateLimit)
+  //   APPLE_DOCS_WEB_RATE=<rps>, APPLE_DOCS_WEB_BURST=<n>  (also imply "all")
+  // See lib/edge-rate-gate.js. The strict 5/min limit on the /docs/<key>
+  // on-demand-fetch path lives inside docs.route.js and is independent —
+  // that's a specific SSRF amplifier control, not general rate limiting.
+  const gateConfig = resolveRateGateConfig(process.env, 'APPLE_DOCS_WEB', { forceAll: opts.rateLimit === true })
+  const defaultLimiter = gateConfig.mode === 'off'
+    ? null
+    : createRateLimiter({ rate: gateConfig.rate, burst: gateConfig.burst, name: 'web' })
+  const rateGate = defaultLimiter ? createEdgeRateGate({ mode: gateConfig.mode, limiter: defaultLimiter }) : null
 
   const registry = createRouteRegistry()
   registry.register('/healthz', healthHandler)
@@ -157,9 +151,9 @@ export async function startDevServer(opts, ctx) {
     hostname: host,
     async fetch(request, srv) {
       const reqStart = performance.now()
-      if (defaultLimiter) {
-        const defaultGate = defaultLimiter.take(request, srv)
-        if (!defaultGate.ok) return tooManyRequestsResponse(defaultGate.retryAfterMs, defaultLimiter.name)
+      if (rateGate) {
+        const gate = rateGate.check(request, srv)
+        if (!gate.ok) return tooManyRequestsResponse(gate.retryAfterMs, rateGate.name)
       }
       // Stash srv on ctx so handlers can resolve client IP for their own
       // gates (A7 docs on-demand). webCtx is per-server, so this is safe

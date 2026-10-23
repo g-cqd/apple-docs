@@ -25,7 +25,7 @@
  */
 
 import { Semaphore } from '../../lib/semaphore.js'
-import { createRateLimiter } from './rate-limit.js'
+import { createRateLimiter } from '../../lib/ip-rate-limiter.js'
 
 const DEFAULT_PER_IP_RATE = 5 / 60     // 5 req per minute (rate is per-second)
 const DEFAULT_PER_IP_BURST = 5
