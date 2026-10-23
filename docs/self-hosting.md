@@ -422,6 +422,60 @@ set `APPLE_DOCS_BETA_ROLLOUT`) to push-update a beta-channel instance
 immediately after publishing — the weekly autoroll remains the fallback
 for missed pushes, and is channel-aware too.
 
+## Sandbox
+
+The web and MCP daemons run under a macOS Seatbelt profile by default. If an
+attacker gets code execution inside either process, the profile limits what
+that code can reach. The reference deployment applies it through
+`ops/bin/run-sandboxed.sh`, the first element of each daemon's launchd
+`ProgramArguments`. Setup, deploy, sync and snapshot jobs run unsandboxed, as
+do Caddy, cloudflared and the watchdog.
+
+| | Web server | MCP server |
+| --- | --- | --- |
+| Read | checkout (read-only), the bun binary, data/log/temp dirs | same |
+| Write | data dir, `ops/logs`, `<data>/tmp` | same |
+| Listen | loopback, its own backend port | loopback, its own backend port |
+| Outbound network | TCP 443 and DNS, for the on-demand `/docs/*` fetch | none |
+| Spawn | `/usr/bin/sips` only (SF Symbol PNG output) | same |
+| Home directory, `~/.ssh`, other repos | denied | denied |
+
+Consequences:
+
+- **No `git`, `python3` or Swift toolchain inside the sandbox.** The commit
+  shown by `/healthz` is resolved by the wrapper before the sandbox starts
+  (`APPLE_DOCS_COMMIT`). Live SF Symbol rendering through AppKit and font
+  subsetting through `pyftsubset` are denied; the snapshot SVG path and the
+  JavaScript font code are not affected. Font subsetting degrades gracefully
+  and reports itself as unavailable.
+- **Egress is by port, not by host.** Seatbelt filters on address and port, so
+  `--egress` cannot be limited to `developer.apple.com`. The `/docs/*` route
+  keeps its own 5-requests-per-minute limit.
+- **Fails closed.** With the sandbox on and no `/usr/bin/sandbox-exec`, the
+  wrapper refuses to start instead of running unconfined.
+- **`sandbox-exec` is deprecated by Apple** but is what the system's own
+  daemons and several browsers use, and it works through macOS 27. A future
+  release could remove it; set `SANDBOX_SERVE=off` and tell the user if so.
+
+Configure in `ops/.env`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SANDBOX_SERVE` | `on` | `off` runs both servers unconfined. Any other value is rejected at load time so a typo cannot disable the sandbox silently. |
+
+To allow something host-specific (another binary, a metrics port), add rules
+to `ops/sandbox/local.sb`; the wrapper appends it to the profile. It is
+gitignored. After any change, run `ops render-all` and restart the daemons.
+
+Debug a denied operation (a feature that works with `SANDBOX_SERVE=off`):
+
+```sh
+log stream --style compact --predicate 'sender == "Sandbox" AND eventMessage CONTAINS "bun"'
+```
+
+Each line names the denied operation and path. Seatbelt matches fully resolved
+paths (`/tmp` is `/private/tmp`), and its regexes have no `{n}` quantifier.
+
 ## Observability
 
 | Endpoint | What it shows |
