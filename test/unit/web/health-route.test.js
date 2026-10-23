@@ -22,6 +22,13 @@ describe('GET /healthz', () => {
     expect(body).toHaveProperty('commit')
   })
 
+  test('local callers learn whether the process is confined; edge callers never do', async () => {
+    const local = await healthHandler(req('/healthz')).json()
+    expect(local.sandboxed).toBe(false) // the test process is unconfined
+    const edge = await healthHandler(req('/healthz', EDGE)).json()
+    expect(edge).not.toHaveProperty('sandboxed')
+  })
+
   test('edge callers get only ok, service and version', async () => {
     const body = await healthHandler(req('/healthz', EDGE)).json()
     expect(Object.keys(body).sort()).toEqual(['ok', 'service', 'version'])

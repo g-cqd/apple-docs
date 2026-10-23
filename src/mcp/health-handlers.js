@@ -7,7 +7,9 @@
  * Liveness body. When `exposeCacheStats` is on, includes the cache
  * registry, markdown cache, semaphore stats, and reader-pool stats so
  * an operator can probe how the process is loaded without scraping a
- * separate metrics endpoint.
+ * separate metrics endpoint. `sandboxed` (true, false, or null when unknown)
+ * is included when the caller passes it; the HTTP server does so for local
+ * callers only.
  */
 export function buildHealthBody({
   exposeCacheStats,
@@ -18,8 +20,10 @@ export function buildHealthBody({
   heavySemaphore,
   concurrencyStats,
   readerPool,
+  sandboxed,
 }) {
   const body = { ok: true, service: 'apple-docs-mcp' }
+  if (sandboxed !== undefined) body.sandboxed = sandboxed
   if (!exposeCacheStats) return body
   body.cache = cacheRegistry.stats()
   body.markdownCache = markdownCache.stats?.()

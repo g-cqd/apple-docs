@@ -11,6 +11,7 @@ import { maybeStartMcpMetricsServer } from './metrics-provider.js'
 import { classifyRpcPayload } from './rpc-classify.js'
 import { ALLOWED_METHODS, methodNotAllowedResponse, rejectUnsupportedBatch } from './request-policy.js'
 import { isEdgeRequest } from '../lib/http-edge.js'
+import { isSandboxed } from '../lib/sandbox-probe.js'
 import { createEdgeRateGate, resolveRateGateConfig } from '../lib/edge-rate-gate.js'
 import { createRateLimiter } from '../lib/ip-rate-limiter.js'
 
@@ -174,6 +175,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
         exposeCacheStats: exposeCacheStats && detailed, cacheRegistry, markdownCache,
         heavyMax, heavyQueue, heavySemaphore,
         concurrencyStats, readerPool,
+        sandboxed: detailed ? isSandboxed() : undefined,
       }))
     }
     if (url.pathname === '/readyz') return buildReadinessResponse({ ctx, readerPool, detailed })

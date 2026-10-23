@@ -99,7 +99,7 @@ describe('startHttpServer', () => {
     })
     const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, service: 'apple-docs-mcp' })
+    expect(await res.json()).toEqual({ ok: true, service: 'apple-docs-mcp', sandboxed: false })
     expect(transportCalls).toEqual([])
   })
 
@@ -298,7 +298,7 @@ describe('startHttpServer', () => {
     const { fetch } = await bootHarness({ cacheRegistry: { stats: () => ({ marker: 'should-not-leak' }) } })
     const res = await fetch(new Request('http://127.0.0.1:3031/healthz'))
     const body = await res.json()
-    expect(body).toEqual({ ok: true, service: 'apple-docs-mcp' })
+    expect(body).toEqual({ ok: true, service: 'apple-docs-mcp', sandboxed: false })
     expect(body.cache).toBeUndefined()
   })
 

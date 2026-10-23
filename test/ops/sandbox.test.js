@@ -239,6 +239,8 @@ describe.skipIf(!isDarwin)('Seatbelt profile (macOS, real sandbox-exec)', () => 
         expect(health).toMatchObject({ ok: true, service: 'apple-docs-web' })
         // The commit is resolved by the wrapper because git cannot run inside the sandbox.
         expect(health.commit).toMatch(/^[0-9a-f]{7,40}$/)
+        // The server confirms its own confinement; this is what `ops sandbox status` reads.
+        expect(health.sandboxed).toBe(true)
         expect((await fetch(`${base}/readyz`)).status).toBe(200)
         expect((await fetch(`${base}/api/search?q=view`)).status).toBe(200)
       } finally {

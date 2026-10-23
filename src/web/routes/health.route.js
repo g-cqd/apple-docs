@@ -2,6 +2,7 @@ import { jsonResponse } from '../responses.js'
 import { VERSION } from '../../lib/version.js'
 import { getCommitHash } from '../../lib/git-version.js'
 import { isEdgeRequest } from '../../lib/http-edge.js'
+import { isSandboxed } from '../../lib/sandbox-probe.js'
 
 // Resolved once at module load (getCommitHash memoizes, but hoisting it
 // keeps the liveness handler free of even one-time subprocess work).
@@ -11,14 +12,18 @@ const COMMIT = getCommitHash()
  * Liveness probe. Must not touch the DB or any cache so a stuck request
  * handler does not also fail the upstream health check. `no-store` so a
  * cached 200 cannot mask a wedged origin. Local callers also get the commit
- * so "what is this instance running" is one curl away; public (edge)
- * callers get only `{ok, service, version}`.
+ * and whether the process is confined by the Seatbelt profile (`sandboxed`:
+ * true, false, or null when unknown), so "what is this instance running" is
+ * one curl away; public (edge) callers get only `{ok, service, version}`.
  *
  * @type {import('../route-registry.js').RouteHandler}
  */
 export function healthHandler(request) {
   const body = { ok: true, service: 'apple-docs-web', version: VERSION }
-  if (!isEdgeRequest(request)) body.commit = COMMIT
+  if (!isEdgeRequest(request)) {
+    body.commit = COMMIT
+    body.sandboxed = isSandboxed()
+  }
   return jsonResponse(body, { headers: { 'Cache-Control': 'no-store' } })
 }
 

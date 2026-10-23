@@ -27,6 +27,7 @@ const COMMANDS = Object.freeze({
   'watchdog': { description: 'Long-running daemon that restarts dead services', loader: 'watchdog' },
   'watch-sync': { description: 'First-boot helper: wait for sync, then start web', loader: 'watch-sync' },
   'proxy': { description: 'Caddy proxy verbs (run|validate|reload|status)', loader: 'proxy' },
+  'sandbox': { description: 'Report whether the web and MCP daemons are sandboxed (status)', loader: 'sandbox' },
   'service': { description: 'launchd service verbs (start|stop|restart|status <target>)', loader: 'service' },
 })
 
