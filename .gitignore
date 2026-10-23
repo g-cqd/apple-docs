@@ -66,3 +66,6 @@ timeout-*
 oom-*
 slow-unit-*
 fuzz/corpus/
+
+# ops/ runtime state (e.g. applied-snapshot stamp) — operator-local
+ops/state/
