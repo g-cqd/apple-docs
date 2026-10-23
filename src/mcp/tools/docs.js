@@ -4,6 +4,7 @@
 // file is allowed to shape the public payload.
 
 import { z } from 'zod'
+import { MAX_PAGINATED_MAX_CHARS, MAX_PAGINATED_PAGE, MAX_SEARCH_QUERY_CHARS } from '../../lib/limits.js'
 import { search } from '../../commands/search.js'
 import { lookup } from '../../commands/lookup.js'
 import { frameworks } from '../../commands/frameworks.js'
@@ -36,8 +37,8 @@ import {
 //
 // `z.coerce.number()` accepts numeric strings — observed: claude-code CLI
 // sends `"limit": "5"`. The exposed JSON Schema is still `{ type: "number" }`.
-const paginatedMaxChars = z.coerce.number().int().min(MIN_PAGINATED_MAX_CHARS)
-const paginatedPage = z.coerce.number().int().min(1)
+const paginatedMaxChars = z.coerce.number().int().min(MIN_PAGINATED_MAX_CHARS).max(MAX_PAGINATED_MAX_CHARS)
+const paginatedPage = z.coerce.number().int().min(1).max(MAX_PAGINATED_PAGE)
 
 // every doc tool is read-only and idempotent.
 const READ_ONLY_HINTS = {
@@ -56,7 +57,7 @@ const minVersionSchema = z.object({
 }).optional().describe('Min version per platform, e.g. {"ios":"17.0"}.')
 
 const matchExcerptSchema = z.object({
-  query: z.string().describe('Substring to locate.'),
+  query: z.string().max(MAX_SEARCH_QUERY_CHARS).describe('Substring to locate.'),
   context: z.coerce.number().int().min(20).max(2000).optional().describe('Chars around each match (default 140).'),
   max: z.coerce.number().int().min(1).max(50).optional().describe('Max excerpts (default 5).'),
   caseSensitive: z.boolean().optional(),
@@ -69,7 +70,7 @@ export function registerDocTools(server, ctx, cache) {
       description: 'Search Apple developer docs (keyword + semantic). Prefer compact symbol/API terms; put constraints in filter args, not the query. Set read=true to inline the top hit\'s content.',
       annotations: READ_ONLY_HINTS,
       inputSchema: {
-        query: z.string().describe('Search terms, e.g. "NavigationStack".'),
+        query: z.string().max(MAX_SEARCH_QUERY_CHARS).describe('Search terms, e.g. "NavigationStack".'),
         framework: z.string().optional().describe('Framework slug, e.g. swiftui, app-store-review.'),
         source: z.string().optional().describe('Source slug(s), comma-separated: apple-docc, hig, wwdc, sample-code, swift-evolution, ...'),
         kind: z.string().optional().describe('Page kind (values via list_taxonomy).'),
@@ -81,7 +82,7 @@ export function registerDocTools(server, ctx, cache) {
         year: z.coerce.number().optional().describe('WWDC session year.'),
         track: z.string().optional().describe('WWDC track.'),
         deprecated: z.enum(['include', 'exclude', 'only']).optional().describe('Default include; use exclude when writing code.'),
-        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (min ${MIN_PAGINATED_MAX_CHARS}).`),
+        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (${MIN_PAGINATED_MAX_CHARS}–${MAX_PAGINATED_MAX_CHARS}).`),
         page: paginatedPage.optional().describe('1-based page; needs maxChars.'),
         match: matchExcerptSchema,
       },
@@ -156,7 +157,7 @@ export function registerDocTools(server, ctx, cache) {
         symbol: z.string().optional().describe('Symbol name, e.g. NavigationStack.'),
         framework: z.string().optional().describe('Disambiguates symbol.'),
         section: z.string().optional().describe('Single section by heading.'),
-        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (min ${MIN_PAGINATED_MAX_CHARS}).`),
+        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (${MIN_PAGINATED_MAX_CHARS}–${MAX_PAGINATED_MAX_CHARS}).`),
         page: paginatedPage.optional().describe('1-based page; needs maxChars.'),
         match: matchExcerptSchema,
       },
@@ -198,7 +199,7 @@ export function registerDocTools(server, ctx, cache) {
       annotations: READ_ONLY_HINTS,
       inputSchema: {
         kind: z.string().optional().describe('Filter: framework, technology, tooling, collection, release-notes, tutorial, guidelines, design.'),
-        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (min ${MIN_PAGINATED_MAX_CHARS}).`),
+        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (${MIN_PAGINATED_MAX_CHARS}–${MAX_PAGINATED_MAX_CHARS}).`),
         page: paginatedPage.optional().describe('1-based page; needs maxChars.'),
       },
     },
@@ -226,7 +227,7 @@ export function registerDocTools(server, ctx, cache) {
         path: z.string().optional().describe('Drill into a page, e.g. swiftui/view.'),
         year: z.coerce.number().int().optional().describe('WWDC sessions of one year.'),
         limit: z.coerce.number().int().min(1).max(200).optional().describe('Max pages (default 100, cap 200).'),
-        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (min ${MIN_PAGINATED_MAX_CHARS}).`),
+        maxChars: paginatedMaxChars.optional().describe(`Page size in chars (${MIN_PAGINATED_MAX_CHARS}–${MAX_PAGINATED_MAX_CHARS}).`),
         page: paginatedPage.optional().describe('1-based page; needs maxChars.'),
       },
     },

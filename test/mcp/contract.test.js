@@ -489,6 +489,34 @@ describe('MCP contract — tools', () => {
     expect(parsed.content).toContain('Long Article')
   })
 
+  test.each([
+    ['read_doc', { path: 'swiftui/view', maxChars: 100_000_000 }],
+    ['read_doc', { path: 'swiftui/view', maxChars: 100_001 }],
+    ['read_doc', { path: 'swiftui/view', maxChars: 1400, page: 10_001 }],
+    ['list_frameworks', { maxChars: 100_000_000 }],
+    ['browse', { framework: 'swiftui', maxChars: 100_000_000 }],
+    ['search_docs', { query: 'View', maxChars: 100_000_000 }],
+    ['search_docs', { query: 'a'.repeat(1025) }],
+    ['search_docs', { query: 'a'.repeat(50_000) }],
+    ['search_sf_symbols', { query: 'a'.repeat(1025) }],
+  ])('%s rejects out-of-range input (%#) with a schema error (pentest F8)', async (name, args) => {
+    const result = await client.callTool({ name, arguments: args })
+    expect(result.isError).toBe(true)
+  })
+
+  test('maxChars at the documented upper bound is still accepted', async () => {
+    const result = await client.callTool({ name: 'read_doc', arguments: { path: 'swiftui/long-article', maxChars: 100_000 } })
+    expect(result.isError).toBeFalsy()
+  })
+
+  test('the tool schemas advertise the same bounds the server enforces', async () => {
+    const { tools } = await client.listTools()
+    const readDoc = tools.find(t => t.name === 'read_doc')
+    expect(readDoc.inputSchema.properties.maxChars).toMatchObject({ minimum: 512, maximum: 100_000 })
+    const search = tools.find(t => t.name === 'search_docs')
+    expect(search.inputSchema.properties.query.maxLength).toBe(1024)
+  })
+
   test('read_doc returns a later page when requested', async () => {
     const result = await client.callTool({
       name: 'read_doc',

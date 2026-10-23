@@ -3,6 +3,7 @@
 // the same args; results are cached at the DB / disk layer (sf_symbol_renders)
 // rather than the per-tool cache.
 
+import { MAX_SEARCH_QUERY_CHARS } from '../../lib/limits.js'
 import { z } from 'zod'
 import {
   listAppleFonts,
@@ -34,7 +35,7 @@ export function registerAssetTools(server, ctx, cache) {
       description: 'Search SF Symbols by name, category, alias, or keyword.',
       annotations: READ_ONLY_HINTS,
       inputSchema: {
-        query: z.string().optional().describe('Name or keyword; empty lists all.'),
+        query: z.string().max(MAX_SEARCH_QUERY_CHARS).optional().describe('Name or keyword; empty lists all.'),
         scope: z.enum(['public', 'private']).optional(),
         limit: z.coerce.number().int().min(1).max(500).optional().describe('Max results (default 100).'),
       },

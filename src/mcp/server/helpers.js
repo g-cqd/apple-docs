@@ -3,6 +3,7 @@
 import { coerceSection } from '../../content/coercion.js'
 import { ValidationError } from '../../lib/errors.js'
 import { MIN_PAGINATED_MAX_CHARS } from '../pagination.js'
+import { MAX_PAGINATED_MAX_CHARS, MAX_PAGINATED_PAGE } from '../../lib/limits.js'
 
 /**
  * Apply the section coercion to every entry. The DB layer accepts both
@@ -45,6 +46,12 @@ export function parseResourcePagination(uri) {
   }
   if (maxChars != null && maxChars < MIN_PAGINATED_MAX_CHARS) {
     throw new ValidationError(`maxChars must be at least ${MIN_PAGINATED_MAX_CHARS}.`, { field: 'maxChars', value: maxChars })
+  }
+  if (maxChars != null && maxChars > MAX_PAGINATED_MAX_CHARS) {
+    throw new ValidationError(`maxChars must be at most ${MAX_PAGINATED_MAX_CHARS}.`, { field: 'maxChars', value: maxChars })
+  }
+  if (page > MAX_PAGINATED_PAGE) {
+    throw new ValidationError(`page must be at most ${MAX_PAGINATED_PAGE}.`, { field: 'page', value: page })
   }
 
   return { maxChars, page }
