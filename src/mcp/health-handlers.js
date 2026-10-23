@@ -38,8 +38,11 @@ export function buildHealthBody({
  * Readiness response. 200 only when the DB is reachable AND (when
  * reader-pool is wired) ≥1 worker is alive. Distinct from /healthz:
  * healthz says the process is up, readyz says it can serve traffic.
+ *
+ * `detailed: false` (public callers) returns only `{ok}` so reader-pool
+ * sizes, timeouts and counters stay internal.
  */
-export function buildReadinessResponse({ ctx, readerPool }) {
+export function buildReadinessResponse({ ctx, readerPool, detailed = true }) {
   let dbOk = false
   try {
     ctx?.db?.db?.query('SELECT 1').get()
@@ -54,13 +57,13 @@ export function buildReadinessResponse({ ctx, readerPool }) {
     } catch { readerOk = false }
   }
   const ready = dbOk && readerOk
-  return Response.json(
-    {
-      ok: ready,
-      service: 'apple-docs-mcp',
-      db: dbOk,
-      readerPool: readerPool ? { ok: readerOk, stats: readerStats } : null,
-    },
-    { status: ready ? 200 : 503 },
-  )
+  const body = detailed
+    ? {
+        ok: ready,
+        service: 'apple-docs-mcp',
+        db: dbOk,
+        readerPool: readerPool ? { ok: readerOk, stats: readerStats } : null,
+      }
+    : { ok: ready }
+  return Response.json(body, { status: ready ? 200 : 503 })
 }

@@ -9,6 +9,10 @@ import { BackpressureError, Semaphore } from '../lib/semaphore.js'
 import { isLoopbackOrigin, readJsonRpcBodyCapped } from '../lib/http-body.js'
 import { maybeStartMcpMetricsServer } from './metrics-provider.js'
 import { classifyRpcPayload } from './rpc-classify.js'
+import { ALLOWED_METHODS, methodNotAllowedResponse, rejectUnsupportedBatch } from './request-policy.js'
+import { isEdgeRequest } from '../lib/http-edge.js'
+import { createEdgeRateGate, resolveRateGateConfig } from '../lib/edge-rate-gate.js'
+import { createRateLimiter } from '../lib/ip-rate-limiter.js'
 
 // Re-export the classifier so the public import shape
 // `import { classifyRpcPayload } from 'src/mcp/http-server.js'` keeps
@@ -30,7 +34,7 @@ const SECURITY_HEADERS = {
 
 const CORS_ALLOWED_HEADERS = 'content-type, mcp-session-id, mcp-protocol-version, last-event-id'
 const CORS_EXPOSE_HEADERS = 'mcp-session-id'
-const CORS_METHODS = 'GET, POST, DELETE, OPTIONS'
+const CORS_METHODS = ALLOWED_METHODS
 
 // Active permits. Without a worker pool, heavy SQL work blocks the single
 // Bun event loop regardless of permit count, so raising this buys you queued
@@ -111,6 +115,17 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     ?? new Semaphore(heavyMax, { maxWaiters: heavyQueue })
   const concurrencyStats = { rejected: 0 }
 
+  // Per-visitor token bucket for public traffic (see lib/edge-rate-gate.js).
+  // Unlike the heavy-tool semaphore above, it bounds cheap calls too, so a
+  // single address cannot enumerate the corpus at full speed.
+  const gateConfig = resolveRateGateConfig(process.env, 'APPLE_DOCS_MCP', { forceAll: opts.rateLimit === true })
+  const rateGate = deps.rateGate ?? (gateConfig.mode === 'off'
+    ? null
+    : createEdgeRateGate({
+        mode: gateConfig.mode,
+        limiter: createRateLimiter({ rate: gateConfig.rate, burst: gateConfig.burst, name: 'mcp' }),
+      }))
+
   // When no --allow-origin is set, deny browser origins except loopback.
   function originOk(request) {
     const origin = request.headers.get('origin')
@@ -148,17 +163,20 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     return new Response(null, { status: allowed ? 204 : 403, headers })
   }
 
-  async function handle(request, meta) {
+  async function handle(request, meta, srv) {
     const url = new URL(request.url)
 
+    // Diagnostics (cache, concurrency and reader-pool counters) go to local
+    // callers only; public callers get a minimal body.
+    const detailed = !isEdgeRequest(request)
     if (url.pathname === '/healthz') {
       return Response.json(buildHealthBody({
-        exposeCacheStats, cacheRegistry, markdownCache,
+        exposeCacheStats: exposeCacheStats && detailed, cacheRegistry, markdownCache,
         heavyMax, heavyQueue, heavySemaphore,
         concurrencyStats, readerPool,
       }))
     }
-    if (url.pathname === '/readyz') return buildReadinessResponse({ ctx, readerPool })
+    if (url.pathname === '/readyz') return buildReadinessResponse({ ctx, readerPool, detailed })
 
     if (url.pathname !== '/mcp') {
       return new Response('Not Found', { status: 404 })
@@ -173,22 +191,27 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       )
     }
 
+    if (request.method !== 'POST') return methodNotAllowedResponse()
+
+    if (rateGate) {
+      const gate = rateGate.check(request, srv)
+      if (!gate.ok) return rateLimitedResponse(gate.retryAfterMs)
+    }
+
     // Peek JSON-RPC method so heavy tool calls can be gated without making
     // initialize/ping/tools/list/notifications/resources wait behind them.
     // Body is buffered once (size-capped via readJsonRpcBodyCapped) and
     // forwarded to the transport via a cloned Request.
-    let forwardRequest = request
-    let priority = 'light'
-    if (request.method === 'POST') {
-      const result = await readJsonRpcBodyCapped(request)
-      if (!result.ok) return result.response
-      priority = classifyRpcPayload(result.body)
-      forwardRequest = new Request(request.url, {
-        method: request.method,
-        headers: request.headers,
-        body: result.body,
-      })
-    }
+    const result = await readJsonRpcBodyCapped(request)
+    if (!result.ok) return result.response
+    const batchRejection = rejectUnsupportedBatch(result.body, request.headers.get('mcp-protocol-version'))
+    if (batchRejection) return batchRejection
+    const priority = classifyRpcPayload(result.body)
+    const forwardRequest = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: result.body,
+    })
 
     meta.priority = priority
 
@@ -200,16 +223,11 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const transport = createTransport()
       await mcpServer.connect(transport)
       const response = await transport.handleRequest(forwardRequest)
-      // Safe to close only when the Response is buffered end-to-end, i.e. a
-      // POST handled with enableJsonResponse:true or a DELETE (status-only
-      // body). GET returns a live text/event-stream ReadableStream; closing
-      // the transport here would tear the stream down before the client
-      // reads a single event. We accept the pre-existing leak on GET for
-      // now — GET SSE is rarely used with stateless transports.
-      if (forwardRequest.method === 'POST' || forwardRequest.method === 'DELETE') {
-        try { await mcpServer.close?.() } catch {}
-        try { await transport.close?.() } catch {}
-      }
+      // Only POST reaches this point (GET/DELETE get 405 above), and with
+      // enableJsonResponse the Response is buffered end-to-end, so closing
+      // here cannot tear down a live stream.
+      try { await mcpServer.close?.() } catch {}
+      try { await transport.close?.() } catch {}
       return response
     }
 
@@ -236,6 +254,14 @@ export async function startHttpServer(opts, ctx, deps = {}) {
     }
   }
 
+  function rateLimitedResponse(retryAfterMs) {
+    const retryAfterSec = Math.max(1, Math.ceil(retryAfterMs / 1000))
+    return Response.json(
+      { jsonrpc: '2.0', error: { code: -32003, message: `Rate limit exceeded. Retry after ${retryAfterSec}s.` }, id: null },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec) } },
+    )
+  }
+
   function busyResponse() {
     return Response.json(
       {
@@ -253,7 +279,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
   const server = serveImpl({
     port,
     hostname: host,
-    async fetch(request) {
+    async fetch(request, srv) {
       const started = Date.now()
       const url = new URL(request.url)
       const ua = request.headers.get('user-agent') ?? '-'
@@ -267,7 +293,7 @@ export async function startHttpServer(opts, ctx, deps = {}) {
       const reqLogger = logger?.withRequestId?.(requestId) ?? logger
       const meta = { requestId, logger: reqLogger }
       try {
-        const response = await handle(request, meta)
+        const response = await handle(request, meta, srv)
         applyCorsHeaders(request, response)
         applySecurityHeaders(response)
         response.headers.set('X-Request-Id', requestId)

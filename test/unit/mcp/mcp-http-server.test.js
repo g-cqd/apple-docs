@@ -315,34 +315,139 @@ describe('startHttpServer', () => {
     expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(1)
   })
 
-  test('closes per-request McpServer and transport after a DELETE', async () => {
-    const { fetch, events } = await bootHarness({
-      handleRequest: async () => new Response(null, { status: 200 }),
-    })
-    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', { method: 'DELETE' }))
-    expect(res.status).toBe(200)
-    expect(events.filter(e => e[0] === 'server-close')).toHaveLength(1)
-    expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(1)
-  })
-
-  test('GET /mcp does NOT close the transport (SSE stream must stay open)', async () => {
-    // Regression guard: the SDK returns a live text/event-stream ReadableStream
-    // from GET /mcp. Calling transport.close() after handleRequest resolves
-    // would EOF the stream before any event could flow.
-    const { fetch, events } = await bootHarness({
+  test.each(['GET', 'DELETE', 'PUT', 'PATCH'])('%s /mcp answers 405 immediately and never reaches the transport', async (method) => {
+    // No SSE stream and no sessions exist: a GET used to hang until the edge
+    // returned 502 (pentest F5), and DELETE returned 200 for nothing (F8).
+    const { fetch, events, createServerCalls } = await bootHarness({
       handleRequest: async () => new Response(
-        new ReadableStream({ start(ctrl) { /* keep open */ void ctrl } }),
+        new ReadableStream({ start(ctrl) { void ctrl } }),
         { status: 200, headers: { 'content-type': 'text/event-stream' } },
       ),
     })
-    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', {
-      method: 'GET',
-      headers: { accept: 'text/event-stream' },
-    }))
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('text/event-stream')
-    expect(events.filter(e => e[0] === 'server-close')).toHaveLength(0)
-    expect(events.filter(e => e[0] === 'transport-close')).toHaveLength(0)
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', { method, headers: { accept: 'text/event-stream' } }))
+    expect(res.status).toBe(405)
+    expect(res.headers.get('allow')).toBe('POST, OPTIONS')
+    expect((await res.json()).error.code).toBe(-32000)
+    expect(createServerCalls).toHaveLength(0)
+    expect(events).toHaveLength(0)
+  })
+
+  test('a disallowed Origin is still rejected with 403 before the method check', async () => {
+    const { fetch } = await bootHarness()
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', { method: 'GET', headers: { origin: 'https://evil.example' } }))
+    expect(res.status).toBe(403)
+  })
+
+  test('CORS preflight advertises only POST and OPTIONS', async () => {
+    const { fetch } = await bootHarness({ allowedOrigins: ['https://app.example'] })
+    const res = await fetch(new Request('http://127.0.0.1:3031/mcp', { method: 'OPTIONS', headers: { origin: 'https://app.example' } }))
+    expect(res.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS')
+  })
+
+  describe('JSON-RPC batching (pentest F6)', () => {
+    const post = (body, headers = {}) => new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    })
+    const batch = [{ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { jsonrpc: '2.0', id: 2, method: 'tools/list' }]
+
+    test.each([
+      ['2025-06-18', '2025-06-18'],
+      ['a later revision', '2026-01-01'],
+      ['no protocol header', undefined],
+      ['a malformed protocol header', 'latest'],
+    ])('rejects a batch with a single -32600 error when the client sends %s', async (_name, version) => {
+      const { fetch, events } = await bootHarness()
+      const res = await fetch(post(batch, version ? { 'mcp-protocol-version': version } : {}))
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(Array.isArray(body)).toBe(false)
+      expect(body.error.code).toBe(-32600)
+      expect(body.id).toBeNull()
+      expect(events).toHaveLength(0)
+    })
+
+    test('still accepts a batch from a client that negotiated 2025-03-26', async () => {
+      const { fetch } = await bootHarness()
+      const res = await fetch(post(batch, { 'mcp-protocol-version': '2025-03-26' }))
+      expect(res.status).toBe(200)
+    })
+
+    test.each(['2025-03-26', '2025-06-18', undefined])('rejects an empty batch [] (protocol %s)', async (version) => {
+      const { fetch } = await bootHarness()
+      const res = await fetch(post('[]', version ? { 'mcp-protocol-version': version } : {}))
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe(-32600)
+    })
+
+    test('a rejected batch is never forwarded to the transport', async () => {
+      let forwarded = 0
+      const { fetch } = await bootHarness({ handleRequest: async () => { forwarded++; return Response.json({}) } })
+      await fetch(post(batch, { 'mcp-protocol-version': '2025-06-18' }))
+      expect(forwarded).toBe(0)
+    })
+
+    test('single requests are unaffected', async () => {
+      const { fetch } = await bootHarness()
+      const res = await fetch(post({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { 'mcp-protocol-version': '2025-06-18' }))
+      expect(res.status).toBe(200)
+    })
+  })
+
+  describe('public-edge hardening (pentest F1, F3)', () => {
+    const EDGE = { 'cf-connecting-ip': '203.0.113.50', 'cf-ray': 'test-ray' }
+    const postFrom = (headers) => new Request('http://127.0.0.1:3031/mcp', {
+      method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: rpcBody('tools/list'),
+    })
+
+    test('edge callers get only {ok, service} from /healthz even when cache stats are enabled', async () => {
+      const original = process.env.APPLE_DOCS_MCP_CACHE_STATS
+      process.env.APPLE_DOCS_MCP_CACHE_STATS = '1'
+      try {
+        const { fetch } = await bootHarness()
+        const edge = await (await fetch(new Request('http://127.0.0.1:3031/healthz', { headers: EDGE }))).json()
+        expect(edge).toEqual({ ok: true, service: 'apple-docs-mcp' })
+        const local = await (await fetch(new Request('http://127.0.0.1:3031/healthz'))).json()
+        expect(local.concurrency).toBeDefined()
+      } finally {
+        if (original === undefined) delete process.env.APPLE_DOCS_MCP_CACHE_STATS
+        else process.env.APPLE_DOCS_MCP_CACHE_STATS = original
+      }
+    })
+
+    test('edge callers get only {ok} from /readyz', async () => {
+      const { fetch } = await bootHarness()
+      const res = await fetch(new Request('http://127.0.0.1:3031/readyz', { headers: EDGE }))
+      expect(Object.keys(await res.json())).toEqual(['ok'])
+    })
+
+    test('rate limits an edge visitor with 429 + Retry-After and leaves local traffic alone', async () => {
+      const { fetch } = await bootHarness()
+      let limited = null
+      for (let i = 0; i < 100 && !limited; i++) {
+        const res = await fetch(postFrom(EDGE))
+        if (res.status === 429) limited = res
+      }
+      expect(limited).not.toBeNull()
+      expect(Number(limited.headers.get('retry-after'))).toBeGreaterThanOrEqual(1)
+      expect((await limited.json()).error.code).toBe(-32003)
+      expect((await fetch(postFrom({ ...EDGE, 'cf-connecting-ip': '203.0.113.51' }))).status).toBe(200)
+      expect((await fetch(postFrom({}))).status).toBe(200)
+      expect((await fetch(new Request('http://127.0.0.1:3031/healthz', { headers: EDGE }))).status).toBe(200)
+    })
+
+    test('APPLE_DOCS_MCP_RATE_LIMIT=0 disables limiting', async () => {
+      const original = process.env.APPLE_DOCS_MCP_RATE_LIMIT
+      process.env.APPLE_DOCS_MCP_RATE_LIMIT = '0'
+      try {
+        const { fetch } = await bootHarness()
+        for (let i = 0; i < 100; i++) expect((await fetch(postFrom(EDGE))).status).toBe(200)
+      } finally {
+        if (original === undefined) delete process.env.APPLE_DOCS_MCP_RATE_LIMIT
+        else process.env.APPLE_DOCS_MCP_RATE_LIMIT = original
+      }
+    })
   })
 
   test('cheap protocol methods bypass the heavy-tool semaphore', async () => {
