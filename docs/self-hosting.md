@@ -457,6 +457,18 @@ Consequences:
   daemons and several browsers use, and it works through macOS 27. A future
   release could remove it; set `SANDBOX_SERVE=off` and tell the user if so.
 
+Check that the running daemons are confined:
+
+```sh
+ops/bin/apple-docs-ops sandbox status
+```
+
+Each server tries to list the home directory, which the profile denies, and
+reports the outcome as `sandboxed` in its local `/healthz` body (edge callers
+never see the field). The command reads it from the loopback backends and exits
+1 when `SANDBOX_SERVE=on` and a backend is not confirmed confined, unreachable,
+or too old to report.
+
 Configure in `ops/.env`:
 
 | Variable | Default | Purpose |
@@ -480,7 +492,7 @@ paths (`/tmp` is `/private/tmp`), and its regexes have no `{n}` quantifier.
 
 | Endpoint | What it shows |
 | --- | --- |
-| `GET /healthz` | Process liveness (`{ok: true, service: "apple-docs-mcp"}`, or `"apple-docs-web"` on the web surface) |
+| `GET /healthz` | Process liveness (`{ok: true, service: "apple-docs-mcp"}`, or `"apple-docs-web"` on the web surface). Local callers also get `sandboxed` (`true`, `false` or `null`); web adds `commit` |
 | `GET /readyz` | DB and reader-pool readiness (`{ok, service, db, readerPool}`) |
 | `GET /healthz` with `APPLE_DOCS_MCP_CACHE_STATS=1` | Also reports `cache` (hit ratios, per-tool sizes, stamp), `concurrency` (permits, waiters, rejects), `markdownCache`, and `readerPool` (size, active, pending, errors) |
 | `GET /metrics` on `--metrics-port` | Prometheus metrics for web or MCP, bound to the separate metrics listener |
