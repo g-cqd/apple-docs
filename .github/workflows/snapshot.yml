@@ -50,6 +50,37 @@ jobs:
       # layout, and faster to compress. `zstd` ships on xcode-27 runners;
       # consumers decompress in-process via Bun (long-window capable), so
       # no host `zstd` is needed.
+      # Disk preflight. The 2026-09-20 run (first on `xcode-27`) died with
+      # SQLITE_FULL inside the snapshot VACUUM after 40 minutes of syncing:
+      # the preview image bundles TWO Xcode installs (beta + RC) plus every
+      # simulator runtime, leaving far less free space than `macos-26`.
+      # The build holds ~3 copies of the ~9.5 GB DB at once (source, VACUUM
+      # INTO copy, VACUUM temp) plus the raw-json tree, the staged corpus
+      # and the archive, and the determinism gate then does it all again.
+      # Reclaim what the pipeline never uses (the non-default Xcode and the
+      # simulator runtimes), print the numbers, and fail FAST with a clear
+      # message when the budget still isn't there, instead of 40 min later.
+      - name: Reclaim and verify disk space
+        env:
+          MIN_FREE_GB: '40'
+        run: |
+          echo "== before =="; df -h /
+          keep="$(xcode-select -p | sed -E 's#(/Applications/[^/]+\.app).*#\1#')"
+          for app in /Applications/Xcode*.app; do
+            [ "$app" = "$keep" ] && continue
+            echo "removing $app"; sudo rm -rf "$app" &
+          done
+          xcrun simctl runtime delete all 2>/dev/null || true
+          sudo rm -rf /Library/Developer/CoreSimulator/Caches 2>/dev/null || true
+          wait
+          echo "== after =="; df -h /
+          free_gb=$(( $(df -Pk / | awk 'NR==2 {print $4}') / 1024 / 1024 ))
+          echo "free: ${free_gb} GB (need ${MIN_FREE_GB} GB)"
+          if [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
+            echo "::error::only ${free_gb} GB free on the runner; the snapshot build needs at least ${MIN_FREE_GB} GB. Move build-snapshot to an image with more disk or reclaim more space above."
+            exit 1
+          fi
+
       - name: Set data directory
         run: echo "APPLE_DOCS_HOME=${{ runner.temp }}/apple-docs" >> "$GITHUB_ENV"
 
@@ -115,6 +146,12 @@ jobs:
           APPLE_DOCS_ALLOW_REMOTE_MODELS: '1'
         run: |
           bun run cli.js status --json > dist-status-base.json
+          # Peak-disk trim (after `status`, which reports their sizes, so the
+          # published numbers are unchanged): the snapshot never stages
+          # markdown/ (regenerable on device via `storage materialize`) nor the
+          # font DMGs under resources/fonts/original (only fonts/extracted
+          # ships) — ~2.2 GB the build and the determinism rebuild never read.
+          rm -rf "$APPLE_DOCS_HOME/markdown" "$APPLE_DOCS_HOME/resources/fonts/original"
           bun run scripts/build-snapshot.js \
             --out dist/ \
             --tag ${{ steps.tag.outputs.tag }} \
@@ -146,12 +183,6 @@ jobs:
           # match by construction.
           fail=0
           for f in dist/*.tar.zst; do
-          # Peak-disk trim (after `status`, which reports their sizes, so the
-          # published numbers are unchanged): the snapshot never stages
-          # markdown/ (regenerable on device via `storage materialize`) nor the
-          # font DMGs under resources/fonts/original (only fonts/extracted
-          # ships) — ~2.2 GB the build and the determinism rebuild never read.
-          rm -rf "$APPLE_DOCS_HOME/markdown" "$APPLE_DOCS_HOME/resources/fonts/original"
             name=$(basename "$f")
             a=$(shasum -a 256 "$f" | awk '{print $1}')
             b=$(shasum -a 256 "dist-check/$name" | awk '{print $1}')
