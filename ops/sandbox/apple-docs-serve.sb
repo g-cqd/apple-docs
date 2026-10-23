@@ -1,0 +1,81 @@
+;; Seatbelt profile for the long-running apple-docs servers (`web serve`,
+;; `mcp serve`). It confines the process after a compromise: no read access to
+;; the home directory, no writes outside the data/log/temp dirs, no process
+;; spawning except the allowlist below, and no outbound network unless the
+;; server needs it. It does NOT apply to setup, deploy, sync or build.
+;;
+;; Launched by ops/bin/run-sandboxed.sh with `sandbox-exec -D NAME=value`.
+;; Parameters (all paths must be fully resolved: Seatbelt matches real paths,
+;; so /tmp must be written /private/tmp):
+;;   REPO_DIR   checkout (read-only): sources, node_modules, built assets
+;;   BUN_BIN    the bun executable
+;;   DATA_DIR   corpus, SQLite files, render caches (read-write)
+;;   LOG_DIR    log directory (read-write)
+;;   TMP_DIR    scratch directory, also TMPDIR and the bun transpiler cache
+;;   PORT       loopback TCP port this server listens on
+;;   EGRESS     "yes" allows outbound TCP 443 (web on-demand /docs fetch);
+;;              anything else denies all outbound network
+;;
+;; Seatbelt filters network by address and port, never by host name, so EGRESS
+;; cannot be limited to developer.apple.com.
+
+(version 1)
+(deny default)
+(import "system.sb")
+
+;; --- processes -------------------------------------------------------------
+;; sips rasterizes SF Symbol SVG to PNG (src/resources/apple-symbols/render.js).
+;; Children inherit this sandbox. git, python3 and the Swift toolchain are not
+;; allowed: the commit hash arrives through APPLE_DOCS_COMMIT, and the live
+;; Swift renderers are fallbacks that the snapshot SVG path makes unnecessary.
+(allow process-fork)
+(allow process-exec
+  (literal (param "BUN_BIN"))
+  (literal "/usr/bin/sips"))
+;; exec alone does not grant reading the image; sips also needs a few
+;; LaunchServices / quarantine lookups to open its input file.
+(allow file-read-data (literal "/usr/bin/sips"))
+;; sips stages its output in UUID-named items under the per-user temp dir
+;; (confstr DARWIN_USER_TEMP_DIR), which TMPDIR does not redirect. Allow only
+;; that name shape, not the directory. (Seatbelt regexes have no {n}
+;; quantifier and "\\." needs care: use [.] and +, and test a pattern with
+;; sandbox-exec before trusting it.)
+(allow file-read* file-write*
+  (regex #"^/private/var/folders/[^/]+/[^/]+/T/[.]?[0-9A-F]+-[0-9A-F-]+(-[0-9A-Za-z]+)?(/.*)?$"))
+(allow mach-lookup
+  (global-name "com.apple.coreservices.quarantine-resolver")
+  (global-name "com.apple.CoreServices.coreservicesd")
+  (global-name "com.apple.lsd.mapdb")
+  (global-name "com.apple.lsd.modifydb")
+  (global-name "com.apple.DiskArbitration.diskarbitrationd"))
+
+;; --- files -----------------------------------------------------------------
+;; stat/realpath of parent directories reveals names, never contents.
+(allow file-read-metadata)
+(allow file-read*
+  (subpath (param "REPO_DIR"))
+  (literal (param "BUN_BIN"))
+  (literal "/etc/hosts") (literal "/private/etc/hosts")
+  (subpath "/usr/share/icu")
+  (subpath "/private/var/db/timezone"))
+(allow file-read* file-write*
+  (subpath (param "DATA_DIR"))
+  (subpath (param "LOG_DIR"))
+  (subpath (param "TMP_DIR")))
+;; The repo's own directories that the server writes at run time are the
+;; data/log/temp dirs above; the checkout itself stays read-only.
+
+;; --- network ---------------------------------------------------------------
+(allow network-bind (local tcp (string-append "localhost:" (param "PORT"))))
+(allow network-inbound (local tcp (string-append "localhost:" (param "PORT"))))
+(if (string=? (param "EGRESS") "yes")
+  (begin
+    (allow network-outbound (remote tcp "*:443"))
+    ;; Name resolution (mDNSResponder socket), interface info and the CA bundle
+    ;; Bun uses to verify TLS.
+    (allow network-outbound (literal "/private/var/run/mDNSResponder"))
+    (allow system-info (info-type "net.link.addr"))
+    (allow file-read*
+      (literal "/Library/Preferences/com.apple.networkd.plist")
+      (literal "/private/etc/ssl/cert.pem")
+      (subpath "/private/etc/ssl"))))

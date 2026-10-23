@@ -17,7 +17,9 @@ ops/
 ├── cli.js                  # single dispatcher; subcommands live in cmd/
 ├── cmd/*.js                # one file per verb (deploy, install, watchdog, …)
 ├── lib/*.js                # env loader, launchctl wrapper, http probe, …
-├── bin/*.sh                # thin shims so launchd plists keep working
+├── bin/*.sh                # thin shims so launchd plists keep working;
+│                           #   run-sandboxed.sh wraps the web and MCP daemons
+├── sandbox/*.sb            # Seatbelt profile for those two daemons
 ├── launchd/*.tpl           # system LaunchDaemons (incl. weekly auto-roll),
 │                           #   sudoers, and the newsyslog log-rotation drop-in
 ├── caddy/Caddyfile.tpl     # reverse proxy terminating TLS on localhost

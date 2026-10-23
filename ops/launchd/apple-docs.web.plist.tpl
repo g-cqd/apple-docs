@@ -10,6 +10,11 @@
     <string>staff</string>
     <key>ProgramArguments</key>
     <array>
+        <string>${OPS_DIR}/bin/run-sandboxed.sh</string>
+        <string>--port</string>
+        <string>${WEB_BACKEND_PORT}</string>
+        <string>--egress</string>
+        <string>--</string>
         <string>${BUN_BIN}</string>
         <string>run</string>
         <string>${REPO_DIR}/cli.js</string>
@@ -54,6 +59,21 @@
         <string>/Users/${USER_NAME}</string>
         <key>APPLE_DOCS_HOME</key>
         <string>${DATA_DIR}</string>
+        <!-- Seatbelt sandbox wrapper inputs (ops/bin/run-sandboxed.sh). The
+             wrapper confines this server after a compromise: no home-directory
+             reads, writes only to the data/log/temp dirs, no spawning except
+             sips. Set SANDBOX_SERVE=off in ops/.env to run unconfined; see
+             docs/self-hosting.md "Sandbox". -->
+        <key>SANDBOX_SERVE</key>
+        <string>${SANDBOX_SERVE}</string>
+        <key>REPO_DIR</key>
+        <string>${REPO_DIR}</string>
+        <key>OPS_DIR</key>
+        <string>${OPS_DIR}</string>
+        <key>DATA_DIR</key>
+        <string>${DATA_DIR}</string>
+        <key>BUN_BIN</key>
+        <string>${BUN_BIN}</string>
         <!-- Split the streams: info/debug to StandardOutPath, warn/error to
              StandardErrorPath. Without this every request line lands in the
              .err.log (199 MB of `info` observed) and real failures are
