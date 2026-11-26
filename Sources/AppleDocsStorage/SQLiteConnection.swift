@@ -21,6 +21,13 @@ public final class SQLiteConnection {
                 )
                 if options.enableWAL, !isInMemory { persistWAL() }
                 try configure(options: options, isInMemory: isInMemory)
+            case .readOnlyImmutable:
+                let uri = path.hasPrefix("file:") ? path : "file:\(path)?immutable=1"
+                self.handle = try Self.open(
+                    uri,
+                    flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_URI | SQLITE_OPEN_NOMUTEX
+                )
+                try configure(options: options, isInMemory: false)
             case .readOnly:
                 // A WAL database whose `-wal`/`-shm` were removed by its last writer cannot be opened with
                 // SQLITE_OPEN_READONLY (the connection may not create them). Readers therefore open read-write and

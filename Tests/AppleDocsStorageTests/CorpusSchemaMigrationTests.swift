@@ -61,4 +61,17 @@ struct CorpusSchemaMigrationTests {
         #expect(body.isEmpty)
         #expect(try store.connection.queryOne("SELECT COUNT(*) FROM document_chunks")?.integer(at: 0) == 0)
     }
+
+    @Test func `a fresh v1 database seeds default framework synonyms`() throws {
+        let store = try CorpusStore(path: ":memory:")
+        defer { store.close() }
+        let aliases = try store.connection
+            .query(
+                "SELECT alias FROM framework_synonyms WHERE canonical = 'quartzcore' ORDER BY alias"
+            )
+            .map { try $0.text(at: 0) }
+        #expect(aliases == ["coreanimation"])
+        let count = try store.connection.queryOne("SELECT COUNT(*) FROM framework_synonyms")?.integer(at: 0)
+        #expect(count == 9)
+    }
 }

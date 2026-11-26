@@ -36,7 +36,7 @@ public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable 
             throw .unsafeURL(request.url, reason: "malformed URL")
         }
         var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
+        urlRequest.httpMethod = request.method
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         urlRequest.setValue(request.accept, forHTTPHeaderField: "Accept")
         if let etag = request.ifNoneMatch, !etag.isEmpty {
@@ -44,6 +44,9 @@ public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable 
         }
         if let modified = request.ifModifiedSince, !modified.isEmpty {
             urlRequest.setValue(modified, forHTTPHeaderField: "If-Modified-Since")
+        }
+        for (name, value) in request.headers where !name.isEmpty {
+            urlRequest.setValue(value, forHTTPHeaderField: name)
         }
 
         let data: Data

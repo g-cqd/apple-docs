@@ -108,11 +108,13 @@ extension DocumentLookup {
             bindings: [.text(key.rawValue)]
         )
         var out: OrderedDictionary<String, JSONValue> = [:]
+        // @dl:disable -- relation_type → Bun camelCase wire key map
+        let names = [
+            "inherits_from": "inheritsFrom", "inherited_by": "inheritedBy", "conforms_to": "conformsTo",
+            "see-also": "seeAlso", "see_also": "seeAlso", "seeAlso": "seeAlso", "child": "children"
+        ]
+        // @dl:enable
         for row in rows {
-            let names = [
-                "inherits_from": "inheritsFrom", "inherited_by": "inheritedBy", "conforms_to": "conformsTo",
-                "see-also": "seeAlso", "see_also": "seeAlso", "seeAlso": "seeAlso", "child": "children"
-            ]
             guard let name = names[try row.text(at: 0)] else { continue }
             let count = try row.integer(at: 1)
             if count > 0 { out[name] = .int(count) }

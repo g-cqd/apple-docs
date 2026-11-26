@@ -102,7 +102,8 @@ extension DocCSectionNormalizer {
         var object = OrderedJSONObject()
         for field in fields {
             switch field {
-                case "type": object[field] = DocCMetadata.enrichedTypeTokens(item["type"], refs: refs)
+                case "type":
+                    object[field] = DocCMetadata.enrichedTypeTokens(item["type"], refs: refs, keyMapper: keyMapper)
                 case "content": object[field] = resolvedContent(item["content"])
                 case "required": object[field] = value(item["required"], or: .bool(false))
                 case "attributes": object[field] = value(item["attributes"], or: .array([]))
@@ -128,6 +129,7 @@ extension DocCSectionNormalizer {
     }
 
     private func resolvedContent(_ json: JSON) -> JSONValue {
-        json.isArray ? DocCReferences.resolvedContent(json, refs: refs) : value(json, or: .array([]))
+        json.isArray
+            ? DocCReferences.resolvedContent(json, refs: refs, keyMapper: keyMapper) : value(json, or: .array([]))
     }
 }

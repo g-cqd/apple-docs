@@ -3,6 +3,7 @@ public struct SQLiteOpenOptions: Hashable, Sendable {
     /// Access mode for the database file.
     public enum AccessMode: Hashable, Sendable {
         case readOnly
+        case readOnlyImmutable
         case readWriteCreate
     }
 
@@ -34,4 +35,13 @@ public struct SQLiteOpenOptions: Hashable, Sendable {
 
     /// Read-only configuration for concurrent reader pool connections and legacy imports.
     public static let readOnly = Self(mode: .readOnly, enableWAL: false, enableForeignKeys: false)
+
+    /// Immutable read-only URI open (`file:<path>?immutable=1`, `SQLITE_OPEN_READONLY | SQLITE_OPEN_URI`):
+    /// never touches `-wal` / `-shm` under `/System`.
+    public static let readOnlyImmutable = Self(
+        mode: .readOnlyImmutable,
+        enableWAL: false,
+        enableForeignKeys: false,
+        mmapSizeBytes: 0
+    )
 }

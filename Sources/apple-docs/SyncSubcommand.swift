@@ -11,13 +11,14 @@ struct SyncSubcommand: AsyncParsableCommand {
         commandName: "sync",
         abstract: "Synchronize documentation from Apple and Swift sources into a Swift v1 corpus.",
         discussion: """
-            Without --seed, syncs the whole catalog: refreshes the roots from Apple's technologies index, skips \
-            roots whose navigation index is unchanged, revalidates the others with conditional requests, and crawls \
-            every selected root in one pool. With --seed, crawls one source from the given pages.
+            Without --seed, syncs the entire corpus across all 12 sources: refreshes Apple's technologies catalog \
+            and non-DocC source inventories, skips DocC roots whose navigation index is unchanged, crawls every \
+            selected root in one pool, merges local Xcode MobileAsset documentation when present, and updates \
+            semantic chunk embeddings. With --seed, crawls one source from the given pages.
             """
     )
 
-    @Option(name: .shortAndLong, help: "Source slug (repeatable). Default: apple-docc and hig.")
+    @Option(name: .shortAndLong, help: "Source slug (repeatable). Default: all 12 sources.")
     var source: [String] = []
 
     @Option(name: .long, help: "Only sync these root slugs (repeatable).")
@@ -29,8 +30,11 @@ struct SyncSubcommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Revalidate every page and retry failed ones, ignoring index gates.")
     var full = false
 
-    @Flag(name: .long, inversion: .prefixedNo, help: "Refresh the root catalog from Apple's technologies index.")
+    @Flag(name: .long, inversion: .prefixedNo, help: "Discover roots and flat-source inventories before crawling.")
     var discover = true
+
+    @Flag(name: .long, inversion: .prefixedNo, help: "Merge local Xcode MobileAsset documentation when present.")
+    var enrich = true
 
     @Flag(name: .long, inversion: .prefixedNo, help: "Update the semantic search index after the crawl.")
     var embeddings = true
@@ -44,13 +48,13 @@ struct SyncSubcommand: AsyncParsableCommand {
     @Option(name: .long, help: "Concurrent in-flight HTTP requests (1-256).")
     var concurrency = 100
 
-    @Option(name: .long, help: "Maximum requests per second (token bucket; 0 for unlimited).")
+    @Option(name: .long, help: "Maximum requests per second on primary Apple hosts (0 for unlimited).")
     var rate = 500.0
 
     @Option(name: .long, help: "Target Swift v1 corpus database path.")
     var db: String?
 
-    @Flag(name: .long, help: "List all 11 supported upstream source adapters and exit.")
+    @Flag(name: .long, help: "List all 12 supported upstream source adapters and exit.")
     var listSources = false
 
     func run() async throws {
@@ -62,7 +66,7 @@ struct SyncSubcommand: AsyncParsableCommand {
         }
         let kinds = try source.map { name in
             guard let kind = SourceKind(rawValue: name.lowercased()) else {
-                throw ValidationError("Unknown source '\(name)'. Pass --list-sources to see all 11 sources.")
+                throw ValidationError("Unknown source '\(name)'. Pass --list-sources to see all 12 sources.")
             }
             return kind
         }
@@ -76,22 +80,41 @@ struct SyncSubcommand: AsyncParsableCommand {
     }
 
     private func syncCorpus(kinds: [SourceKind], store: CorpusStore) async throws {
+        let selectedSources: Set<SourceKind>
+        if !kinds.isEmpty {
+            selectedSources = Set(kinds)
+        } else if !root.isEmpty {
+            // When `--root` is given without `--source`, keep all sources so any matching root slug is found,
+            // while `discoverNonDocCSources` filters to the requested root slugs.
+            selectedSources = Set(SourceKind.allCases)
+        } else {
+            selectedSources = Set(SourceKind.allCases)
+        }
         let report = try await CorpusSync.run(
             client: client(),
             store: store,
             options: CorpusSync.Options(
-                sources: kinds.isEmpty ? [.appleDocC, .hig] : Set(kinds),
+                sources: selectedSources,
                 roots: root.isEmpty ? nil : Set(root.map { $0.lowercased() }),
                 discoverRoots: discover,
                 full: full,
                 concurrency: concurrency,
                 maxPages: maxPages ?? Int.max,
                 maxDepth: maxDepth ?? 1_000,
+                enrichMobileAsset: enrich && root.isEmpty,
                 embeddings: embeddingStage()
             )
         )
+        for (sourceName, error) in report.discoveryFailures.sorted(by: { $0.key < $1.key }) {
+            print("warning: discovery failed for \(sourceName) (\(error))")
+        }
         for (slug, error) in report.indexFailures.sorted(by: { $0.key < $1.key }).prefix(10) {
             print("warning: index for \(slug) unavailable (\(error)); revalidated its pages instead")
+        }
+        if let enriched = report.enrichment, !enriched.skippedUnchanged {
+            print(
+                "Xcode asset merge: \(enriched.usrBackfilled) USRs, \(enriched.platformsBackfilled) platform backfills, \(enriched.novelInserted) novel pages"
+            )
         }
         if let embedded = report.embeddings {
             print("Semantic index: \(embedded.chunks) chunks embedded across \(embedded.documents) documents")
@@ -107,16 +130,16 @@ struct SyncSubcommand: AsyncParsableCommand {
         )
     }
 
-    /// The upstream client, paced by `--rate` (Bun's sync defaults: 100 in flight, 500 requests/s), with one HTTP
-    /// connection per in-flight request.
+    /// The upstream client, paced per hostname (`rate` on Apple origins, polite 20 req/s buckets on GitHub /
+    /// swift.org / third-party hosts), with one HTTP connection per in-flight request.
     private func client() -> UpstreamHTTPClient {
-        // developer.apple.com serves HTTP/1.1, so in-flight requests need one connection each.
-        UpstreamHTTPClient(
+        let limiter: HostRateLimiter? =
+            rate > 0
+            ? HostRateLimiter(primaryRate: rate, primaryBurst: max(1, Int(rate)))
+            : nil
+        return UpstreamHTTPClient(
             transport: URLSessionUpstreamTransport(maxConnectionsPerHost: concurrency),
-            policy: UpstreamHTTPClient.Policy(
-                requestsPerSecond: rate > 0 ? rate : nil,
-                burst: rate > 0 ? Int(rate) : nil
-            )
+            policy: UpstreamHTTPClient.Policy(hostRateLimiter: limiter)
         )
     }
 

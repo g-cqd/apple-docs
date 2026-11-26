@@ -10,8 +10,10 @@ public final class UpstreamHTTPClient: Sendable {
         public let maxBodyBytes: Int
         public let allowedHosts: Set<String>?
         public let sleepBeforeRetry: @Sendable (Int) async -> Void
-        /// Shared token bucket every attempt waits on (`nil`: unlimited).
+        /// Shared token bucket every attempt waits on (`nil`: unlimited unless `hostRateLimiter` is set).
         public let rateLimiter: RequestRateLimiter?
+        /// Per-hostname token bucket (`nil`: disabled).
+        public let hostRateLimiter: HostRateLimiter?
 
         public init(
             maxAttempts: Int = 3,
@@ -19,12 +21,14 @@ public final class UpstreamHTTPClient: Sendable {
             allowedHosts: Set<String>? = nil,
             requestsPerSecond: Double? = nil,
             burst: Int? = nil,
+            hostRateLimiter: HostRateLimiter? = nil,
             sleepBeforeRetry: @escaping @Sendable (Int) async -> Void = { _ in }
         ) {
             self.maxAttempts = max(1, min(maxAttempts, 8))
             self.maxBodyBytes = max(1_024, maxBodyBytes)
             self.allowedHosts = allowedHosts
             self.sleepBeforeRetry = sleepBeforeRetry
+            self.hostRateLimiter = hostRateLimiter
             self.rateLimiter = requestsPerSecond.map { rate in
                 RequestRateLimiter(requestsPerSecond: rate, burst: burst ?? max(1, Int(rate)))
             }
@@ -51,8 +55,12 @@ public final class UpstreamHTTPClient: Sendable {
 
     /// Conditional GET with `If-None-Match`: 304 → ``ConditionalOutcome/notModified``, 404/410 →
     /// ``ConditionalOutcome/gone``, 2xx → the response; any other status throws.
-    public func conditionalGet(url: String, etag: String?) async throws(SourceError) -> ConditionalOutcome {
-        let response = try await get(url: url, ifNoneMatch: etag)
+    public func conditionalGet(
+        url: String,
+        etag: String?,
+        headers: [String: String] = [:]
+    ) async throws(SourceError) -> ConditionalOutcome {
+        let response = try await get(url: url, ifNoneMatch: etag, headers: headers)
         if response.isNotModified { return .notModified }
         if response.isDeleted { return .gone }
         guard (200 ... 299).contains(response.statusCode) else { throw .httpStatus(response.statusCode, url: url) }
@@ -60,17 +68,21 @@ public final class UpstreamHTTPClient: Sendable {
     }
 
     /// Validates `url` against HTTPS-only & SSRF rules (rejecting loopback, link-local, private RFC1918,
-    /// metadata IPs, and embedded credentials) before issuing a conditional GET with retries.
+    /// metadata IPs, and embedded credentials) before issuing a conditional request with retries.
     public func get(
         url: String,
+        method: String = "GET",
         ifNoneMatch: String? = nil,
-        ifModifiedSince: String? = nil
+        ifModifiedSince: String? = nil,
+        headers: [String: String] = [:]
     ) async throws(SourceError) -> UpstreamFetchResponse {
         try Self.validatePublicHTTPSURL(url, allowedHosts: policy.allowedHosts)
         let request = UpstreamFetchRequest(
             url: url,
+            method: method,
             ifNoneMatch: ifNoneMatch,
             ifModifiedSince: ifModifiedSince,
+            headers: headers,
             maxBodyBytes: policy.maxBodyBytes
         )
 
@@ -78,6 +90,7 @@ public final class UpstreamHTTPClient: Sendable {
         for attempt in 1 ... policy.maxAttempts {
             let response: UpstreamFetchResponse
             await policy.rateLimiter?.acquire()
+            await policy.hostRateLimiter?.acquire(url: url)
             do {
                 response = try await transport.fetch(request)
             } catch .networkFailure {

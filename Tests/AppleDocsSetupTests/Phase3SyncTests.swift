@@ -49,10 +49,10 @@ struct Phase3SyncTests {
         #expect(sleepRecorder.withLock { $0 } == [1, 2])
     }
 
-    @Test func `SourceRegistry exposes all 11 upstream sources with valid HTTPS data URLs`() throws {
+    @Test func `SourceRegistry exposes all 12 upstream sources with valid HTTPS data URLs`() throws {
         let all = SourceRegistry.allAdapters
         #expect(all.count == SourceKind.allCases.count)
-        #expect(all.count == 11)
+        #expect(all.count == 12)
         for adapter in all {
             let seed = try #require(adapter.seedKeys.first)
             let url = try adapter.dataURL(for: seed)

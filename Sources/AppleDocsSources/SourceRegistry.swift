@@ -1,33 +1,47 @@
 public import AppleDocsCore
 import Foundation
 
-/// Authoritative registry of all 11 upstream documentation source adapters loaded from the
-/// bundled `sources.json` catalog.
+/// Authoritative registry of all 12 upstream documentation source adapters.
 public enum SourceRegistry: Sendable {
     private static let catalogByKind: [SourceKind: WebSourceAdapter] = loadCatalog()
 
-    /// Returns the configured ``SourceAdapter`` for `kind`.
+    /// Returns a fresh ``SourceAdapter`` instance for `kind` (stateful adapters like `SwiftBookAdapter`,
+    /// `ExternalDocCAdapter`, `GuidelinesAdapter`, `WWDCAdapter`, and `AppleArchiveAdapter` carry per-run
+    /// discovery caches).
     public static func adapter(for kind: SourceKind) -> any SourceAdapter {
-        if let configured = catalogByKind[kind] {
-            return configured
+        switch kind {
+            case .swiftDocC: return SwiftDocCAdapter()
+            case .externalDocC: return ExternalDocCAdapter()
+            case .swiftEvolution: return SwiftEvolutionAdapter()
+            case .swiftBook: return SwiftBookAdapter()
+            case .guidelines: return GuidelinesAdapter()
+            case .wwdc: return WWDCAdapter()
+            case .sampleCode: return SampleCodeAdapter()
+            case .swiftOrg: return SwiftOrgAdapter()
+            case .appleArchive: return AppleArchiveAdapter()
+            case .packages: return PackagesAdapter()
+            case .appleDocC, .hig:
+                if let configured = catalogByKind[kind] {
+                    return configured
+                }
+                return WebSourceAdapter(
+                    spec: WebSourceAdapter.Spec(
+                        kind: kind,
+                        displayName: kind.rawValue,
+                        rootSlug: kind.rawValue,
+                        rootKind: "collection",
+                        seedPath: kind.rawValue,
+                        host: "developer.apple.com",
+                        basePathSegments: ["tutorials", "data", "documentation"],
+                        dropsRootSegment: false,
+                        fileExtension: "json",
+                        encoding: .doccJSON
+                    )
+                )
         }
-        return WebSourceAdapter(
-            spec: WebSourceAdapter.Spec(
-                kind: kind,
-                displayName: kind.rawValue,
-                rootSlug: kind.rawValue,
-                rootKind: "collection",
-                seedPath: kind.rawValue,
-                host: "developer.apple.com",
-                basePathSegments: ["tutorials", "data", "documentation"],
-                dropsRootSegment: false,
-                fileExtension: "json",
-                encoding: .doccJSON
-            )
-        )
     }
 
-    /// Returns all 11 registered adapters in canonical ``SourceKind`` order.
+    /// Returns all 12 registered adapters in canonical ``SourceKind`` order.
     public static var allAdapters: [any SourceAdapter] {
         SourceKind.allCases.map(adapter(for:))
     }

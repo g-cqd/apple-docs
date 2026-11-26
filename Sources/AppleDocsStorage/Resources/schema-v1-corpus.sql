@@ -127,6 +127,17 @@ CREATE TABLE IF NOT EXISTS framework_synonyms (
     PRIMARY KEY (canonical, alias)
 );
 
+INSERT OR IGNORE INTO framework_synonyms (canonical, alias) VALUES
+    ('quartzcore', 'coreanimation'),
+    ('coreanimation', 'quartzcore'),
+    ('quartz2d', 'coregraphics'),
+    ('coregraphics', 'quartz2d'),
+    ('metalkit', 'metal'),
+    ('uikitcore', 'uikit'),
+    ('appkit', 'cocoa'),
+    ('foundation', 'nsobject'),
+    ('swiftui', 'declarativeui');
+
 -- Contentless like Bun's (body text = renderPlainText of the document and its sections), so imported Bun
 -- indexes can be copied shadow table for shadow table.
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_body_fts USING fts5(

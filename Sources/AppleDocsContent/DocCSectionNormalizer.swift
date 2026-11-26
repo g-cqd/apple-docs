@@ -8,6 +8,7 @@ import OrderedCollections
 struct DocCSectionNormalizer {
     let root: JSON
     let refs: JSON
+    let keyMapper: ((String) -> String)?
     private(set) var sections: [DocumentSectionRecord] = []
     private var order = 0
 
@@ -16,8 +17,12 @@ struct DocCSectionNormalizer {
         "possibleValues", "mentions"
     ]
 
-    static func sections(root: JSON, refs: JSON) -> [DocumentSectionRecord] {
-        var builder = DocCSectionNormalizer(root: root, refs: refs)
+    static func sections(
+        root: JSON,
+        refs: JSON,
+        keyMapper: ((String) -> String)? = nil
+    ) -> [DocumentSectionRecord] {
+        var builder = DocCSectionNormalizer(root: root, refs: refs, keyMapper: keyMapper)
         builder.build()
         return builder.sections
     }
@@ -72,7 +77,7 @@ struct DocCSectionNormalizer {
         let declarations = section["declarations"]
         let enriched =
             declarations.exists && !declarations.isNull
-            ? DocCMetadata.enrichedDeclarations(declarations, refs: refs) : .array([])
+            ? DocCMetadata.enrichedDeclarations(declarations, refs: refs, keyMapper: keyMapper) : .array([])
         var text = ""
         if case .array(let items) = enriched, case .object(let first)? = items.first,
             case .array(let tokens)? = first["tokens"]
@@ -112,7 +117,7 @@ struct DocCSectionNormalizer {
             titles.append(title)
             return JSONValue.makeObject {
                 ("identifier", JSONValue(mention))
-                ("key", DocCReferences.optional(DocCReferences.resolveKey(id, refs: refs)))
+                ("key", DocCReferences.optional(DocCReferences.resolveKey(id, refs: refs, keyMapper: keyMapper)))
                 ("title", .string(title))
             }
         }
@@ -141,7 +146,8 @@ struct DocCSectionNormalizer {
             "discussion",
             heading: heading,
             text: text.isEmpty ? nil : text,
-            json: nodes.isArray ? DocCReferences.resolvedContent(nodes, refs: refs) : .array([])
+            json: nodes.isArray
+                ? DocCReferences.resolvedContent(nodes, refs: refs, keyMapper: keyMapper) : .array([])
         )
     }
 
@@ -151,7 +157,7 @@ struct DocCSectionNormalizer {
             kind,
             heading: heading,
             text: DocCReferences.linkSectionsText(root[field], refs: refs),
-            json: DocCReferences.normalizedLinkSections(root[field], refs: refs)
+            json: DocCReferences.normalizedLinkSections(root[field], refs: refs, keyMapper: keyMapper)
         )
     }
 

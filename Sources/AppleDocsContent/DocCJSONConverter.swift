@@ -21,13 +21,15 @@ public enum DocCJSONConverter: Sendable {
     ///   - sourceType: the source the page belongs to.
     ///   - url: the page URL for sources whose URL is not derived from the key (Swift-DocC books); Apple DocC and
     ///     HIG pages always use `https://developer.apple.com/[documentation/]<key>`.
+    ///   - keyMapper: optional key-rewriting closure for external/Swift-DocC archives.
     /// - Returns: the document, its sections and relationships, and the keys it links to.
     /// - Throws: when `bytes` is not valid JSON.
     public static func convert(
         json bytes: [UInt8],
         key: DocumentKey,
         sourceType: SourceKind = .appleDocC,
-        url: String? = nil
+        url: String? = nil,
+        keyMapper: (@Sendable (String) -> String)? = nil
     ) throws -> ConvertedDocument {
         let root = try AemiJSON.parse(bytes).root
         let refs = root["references"]
@@ -62,12 +64,17 @@ public enum DocCJSONConverter: Sendable {
             isReleaseNotes: key.rawValue.contains("release-notes") || role == "releaseNotes",
             urlDepth: key.rawValue.split(separator: "/", omittingEmptySubsequences: false).count - 1
         )
-        let relationships = extractRelationships(from: root, refs: refs, sourceKey: key)
+        let relationships = extractRelationships(from: root, refs: refs, sourceKey: key, keyMapper: keyMapper)
         return ConvertedDocument(
             document: document,
-            sections: DocCSectionNormalizer.sections(root: root, refs: refs),
+            sections: DocCSectionNormalizer.sections(root: root, refs: refs, keyMapper: keyMapper),
             relationships: relationships,
-            discoveredKeys: discoverKeys(relationships: relationships, refs: refs, sourceKey: key)
+            discoveredKeys: discoverKeys(
+                relationships: relationships,
+                refs: refs,
+                sourceKey: key,
+                keyMapper: keyMapper
+            )
         )
     }
 
@@ -103,7 +110,8 @@ public enum DocCJSONConverter: Sendable {
     private static func extractRelationships(
         from root: JSON,
         refs: JSON,
-        sourceKey: DocumentKey
+        sourceKey: DocumentKey,
+        keyMapper: ((String) -> String)?
     ) -> [DocumentRelationshipRecord] {
         var edges: [DocumentRelationshipRecord] = []
         var indexByEdge: [String: Int] = [:]
@@ -117,7 +125,7 @@ public enum DocCJSONConverter: Sendable {
             for group in sectionsNode.array ?? [] {
                 let kind = fixedType ?? Self.relationType(forDocCType: group["type"].string)
                 for id in (group["identifiers"].array ?? []).compactMap(\.string) {
-                    guard let resolved = DocCReferences.resolveKey(id, refs: refs),
+                    guard let resolved = DocCReferences.resolveKey(id, refs: refs, keyMapper: keyMapper),
                         let target = try? DocumentKey(resolved)
                     else { continue }
                     let edge = DocumentRelationshipRecord(
@@ -157,7 +165,8 @@ public enum DocCJSONConverter: Sendable {
     private static func discoverKeys(
         relationships: [DocumentRelationshipRecord],
         refs: JSON,
-        sourceKey: DocumentKey
+        sourceKey: DocumentKey,
+        keyMapper: ((String) -> String)?
     ) -> [DocumentKey] {
         var seen = Set(relationships.map(\.toKey.rawValue))
         var keys = relationships.map(\.toKey).filter { $0 != sourceKey }
@@ -165,7 +174,9 @@ public enum DocCJSONConverter: Sendable {
         for (id, ref) in entries where !id.hasPrefix(externalIDPrefix) {
             guard ref["type"].string == "topic", let url = ref["url"].string, url.contains("/documentation/"),
                 let abstract = ref["abstract"].array, !abstract.isEmpty,
-                let key = normalizeReferenceKey(url), key != sourceKey, seen.insert(key.rawValue).inserted
+                let rawKey = normalizeReferenceKey(url),
+                let key = keyMapper.flatMap({ try? DocumentKey($0(rawKey.rawValue)) }) ?? rawKey as DocumentKey?,
+                key != sourceKey, seen.insert(key.rawValue).inserted
             else {
                 continue
             }

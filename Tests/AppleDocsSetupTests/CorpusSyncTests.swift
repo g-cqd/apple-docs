@@ -84,7 +84,7 @@ struct CorpusSyncTests {
         let client = UpstreamHTTPClient(transport: transport)
         let store = try CorpusStore(path: ":memory:")
         defer { store.close() }
-        let options = CorpusSync.Options(sources: [.appleDocC], concurrency: 4)
+        let options = CorpusSync.Options(sources: [.appleDocC], concurrency: 4, enrichMobileAsset: false)
         _ = try await CorpusSync.run(client: client, store: store, options: options)
 
         transport.resetLog()
@@ -123,7 +123,12 @@ struct CorpusSyncTests {
         let full = try await CorpusSync.run(
             client: client,
             store: store,
-            options: CorpusSync.Options(sources: [.appleDocC], full: true, concurrency: 4)
+            options: CorpusSync.Options(
+                sources: [.appleDocC],
+                full: true,
+                concurrency: 4,
+                enrichMobileAsset: false
+            )
         )
         #expect(full.fullSweep)
         #expect(pageRequests(transport) == ["swiftui", "swiftui/view", "uikit"])
@@ -137,7 +142,13 @@ struct CorpusSyncTests {
         let report = try await CorpusSync.run(
             client: UpstreamHTTPClient(transport: transport),
             store: store,
-            options: CorpusSync.Options(sources: [.appleDocC], roots: ["swiftui"], concurrency: 1, maxPages: 1)
+            options: CorpusSync.Options(
+                sources: [.appleDocC],
+                roots: ["swiftui"],
+                concurrency: 1,
+                maxPages: 1,
+                enrichMobileAsset: false
+            )
         )
         #expect(report.rootsSelected == 1 && report.crawl.fetchedModified == 1)
         // swiftui/view is still pending, so the next run must not trust the index.
@@ -152,7 +163,7 @@ struct CorpusSyncTests {
         let client = UpstreamHTTPClient(transport: transport)
         let store = try CorpusStore(path: ":memory:")
         defer { store.close() }
-        let options = CorpusSync.Options(sources: [.appleDocC], concurrency: 4)
+        let options = CorpusSync.Options(sources: [.appleDocC], concurrency: 4, enrichMobileAsset: false)
         _ = try await CorpusSync.run(client: client, store: store, options: options)
 
         transport.fail(DocCRootIndex.url(forRoot: "uikit"), status: 500)
@@ -162,5 +173,37 @@ struct CorpusSyncTests {
         #expect(report.rootsUnchanged == 1)
         #expect(pageRequests(transport) == ["uikit"])
         #expect(report.crawl.skippedNotModified == 1)
+    }
+
+    @Test func `multi-source sync discovers and crawls DocC and non-DocC sources in one pool`() async throws {
+        let transport = makeUpstream()
+        transport.set(
+            "https://api.github.com/repos/swiftlang/swift-evolution/git/trees/main?recursive=1",
+            body: #"{"truncated":false,"tree":[{"path":"proposals/0001-keywords.md","type":"blob"}]}"#
+        )
+        transport.set(
+            "https://raw.githubusercontent.com/swiftlang/swift-evolution/main/proposals/0001-keywords.md",
+            body: "# Keywords\n\n* Proposal: SE-0001\n* Status: Implemented\n\nBody.",
+            etag: "\"se1\""
+        )
+        let client = UpstreamHTTPClient(transport: transport)
+        let store = try CorpusStore(path: ":memory:")
+        defer { store.close() }
+
+        let report = try await CorpusSync.run(
+            client: client,
+            store: store,
+            options: CorpusSync.Options(
+                sources: [.appleDocC, .swiftEvolution],
+                concurrency: 4,
+                enrichMobileAsset: false
+            )
+        )
+        #expect(report.rootsSelected == 3)  // swiftui, uikit, swift-evolution
+        #expect(report.crawl.fetchedModified == 4 && report.crawl.errors == 0)
+        #expect(try store.documentCount() == 4)
+        let proposal = try #require(try store.document(forKey: try DocumentKey("swift-evolution/0001-keywords")))
+        #expect(proposal.sourceType == .swiftEvolution)
+        #expect(proposal.title == "SE-0001: Keywords")
     }
 }

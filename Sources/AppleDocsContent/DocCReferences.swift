@@ -6,13 +6,22 @@ import OrderedCollections
 /// (`_resolvedTitle` / `_resolvedKey`) so renderers never re-resolve.
 enum DocCReferences {
     /// `resolveRefKey(id, refs)`: the reference URL normalized (relative, then cross-source absolute), else the
-    /// identifier itself normalized.
-    static func resolveKey(_ identifier: String, refs: JSON) -> String? {
+    /// identifier itself normalized, optionally rewritten by `keyMapper`.
+    static func resolveKey(_ identifier: String, refs: JSON, keyMapper: ((String) -> String)? = nil) -> String? {
+        let raw: String?
         if let url = refs[identifier]["url"].string, !url.isEmpty {
-            if let key = AppleIdentifier.normalize(url) { return key }
-            if let key = CrossSourceLinkMapper.key(forURL: url) { return key }
+            if let key = AppleIdentifier.normalize(url) {
+                raw = key
+            } else if let key = CrossSourceLinkMapper.key(forURL: url) {
+                raw = key
+            } else {
+                raw = AppleIdentifier.normalize(identifier)
+            }
+        } else {
+            raw = AppleIdentifier.normalize(identifier)
         }
-        return AppleIdentifier.normalize(identifier)
+        guard let raw else { return nil }
+        return keyMapper?(raw) ?? raw
     }
 
     /// `renderLinkSectionsToText`: group titles and item titles, newline-separated (`nil` when empty).
@@ -29,7 +38,11 @@ enum DocCReferences {
     }
 
     /// `normalizeLinkSections`: `[{title, type, items: [{identifier, key, title}]}]`.
-    static func normalizedLinkSections(_ sections: JSON, refs: JSON) -> JSONValue {
+    static func normalizedLinkSections(
+        _ sections: JSON,
+        refs: JSON,
+        keyMapper: ((String) -> String)? = nil
+    ) -> JSONValue {
         .array(
             (sections.array ?? [])
                 .map { section in
@@ -37,7 +50,7 @@ enum DocCReferences {
                         .map { id in
                             JSONValue.makeObject {
                                 ("identifier", .string(id))
-                                ("key", optional(resolveKey(id, refs: refs)))
+                                ("key", optional(resolveKey(id, refs: refs, keyMapper: keyMapper)))
                                 ("title", .string(DocCPlainText.referenceTitle(id, refs: refs)))
                             }
                         }
@@ -51,25 +64,35 @@ enum DocCReferences {
     }
 
     /// `resolveContentReferences(nodes, refs)`: a copy of `nodes` with references decorated.
-    static func resolvedContent(_ nodes: JSON, refs: JSON) -> JSONValue {
+    static func resolvedContent(
+        _ nodes: JSON,
+        refs: JSON,
+        keyMapper: ((String) -> String)? = nil
+    ) -> JSONValue {
         guard nodes.isArray else { return JSONValue(nodes) }
-        return resolved(JSONValue(nodes), refs: refs, depth: 0, isList: true)
+        return resolved(JSONValue(nodes), refs: refs, keyMapper: keyMapper, depth: 0, isList: true)
     }
 
     static func optional(_ value: String?) -> JSONValue {
         value.map(JSONValue.string) ?? .null
     }
 
-    private static func resolved(_ value: JSONValue, refs: JSON, depth: Int, isList: Bool) -> JSONValue {
+    private static func resolved(
+        _ value: JSONValue,
+        refs: JSON,
+        keyMapper: ((String) -> String)?,
+        depth: Int,
+        isList: Bool
+    ) -> JSONValue {
         guard depth <= DocCPlainText.maxDepth else { return value }
         if isList, case .array(let items) = value {
-            return .array(items.map { resolved($0, refs: refs, depth: depth + 1, isList: false) })
+            return .array(items.map { resolved($0, refs: refs, keyMapper: keyMapper, depth: depth + 1, isList: false) })
         }
         guard case .object(var node) = value else { return value }
         let type = node["type"].flatMap(\.stringValue)
         if type == "reference", let id = node["identifier"].flatMap(\.stringValue) {
             node["_resolvedTitle"] = optional(refs[id]["title"].string ?? node["title"].flatMap(\.stringValue))
-            node["_resolvedKey"] = optional(resolveKey(id, refs: refs))
+            node["_resolvedKey"] = optional(resolveKey(id, refs: refs, keyMapper: keyMapper))
             return .object(node)
         }
         if type == "links", case .array(let items)? = node["items"] {
@@ -79,7 +102,7 @@ enum DocCReferences {
                     return JSONValue.makeObject {
                         ("identifier", .string(id))
                         ("_resolvedTitle", optional(refs[id]["title"].string))
-                        ("_resolvedKey", optional(resolveKey(id, refs: refs)))
+                        ("_resolvedKey", optional(resolveKey(id, refs: refs, keyMapper: keyMapper)))
                     }
                 }
             )
@@ -91,19 +114,22 @@ enum DocCReferences {
             node["_resolvedKey"] = .string(key)
             return .object(node)
         }
-        return .object(resolvedChildren(node, refs: refs, depth: depth, isTermList: type == "termList"))
+        return .object(
+            resolvedChildren(node, refs: refs, keyMapper: keyMapper, depth: depth, isTermList: type == "termList")
+        )
     }
 
     private static func resolvedChildren(
         _ node: OrderedJSONObject,
         refs: JSON,
+        keyMapper: ((String) -> String)?,
         depth: Int,
         isTermList: Bool
     ) -> OrderedJSONObject {
         var node = node
         for field in ["inlineContent", "content"] {
             if let child = node[field], case .array = child {
-                node[field] = resolved(child, refs: refs, depth: depth + 1, isList: true)
+                node[field] = resolved(child, refs: refs, keyMapper: keyMapper, depth: depth + 1, isList: true)
             }
         }
         guard case .array(let items)? = node["items"] else { return node }
@@ -112,12 +138,24 @@ enum DocCReferences {
                 guard case .object(var entry) = item else { return item }
                 // Bun only rewrites array content (`resolveContentReferences` returns non-arrays untouched).
                 if let content = entry["content"], case .array = content {
-                    entry["content"] = resolved(content, refs: refs, depth: depth + 1, isList: true)
+                    entry["content"] = resolved(
+                        content,
+                        refs: refs,
+                        keyMapper: keyMapper,
+                        depth: depth + 1,
+                        isList: true
+                    )
                 }
                 if isTermList {
                     for (field, child) in [("term", "inlineContent"), ("definition", "content")] {
                         guard case .object(var nested)? = entry[field], let nodes = nested[child] else { continue }
-                        nested[child] = resolved(nodes, refs: refs, depth: depth + 1, isList: true)
+                        nested[child] = resolved(
+                            nodes,
+                            refs: refs,
+                            keyMapper: keyMapper,
+                            depth: depth + 1,
+                            isList: true
+                        )
                         entry[field] = .object(nested)
                     }
                 }

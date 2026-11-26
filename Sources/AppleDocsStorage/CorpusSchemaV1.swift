@@ -26,13 +26,20 @@ public enum CorpusSchemaV1: Sendable {
         ("crawl_state", "last_modified", "TEXT")
     ]
 
-    /// Indexes added to v1 after its first release (idempotent DDL).
+    /// Indexes and default rows added to v1 after its first release (idempotent DDL).
     static let addedIndexes = [
         "CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);",
         """
         CREATE TABLE IF NOT EXISTS framework_synonyms (
             canonical TEXT NOT NULL, alias TEXT NOT NULL UNIQUE, PRIMARY KEY (canonical, alias)
         );
+        """,
+        """
+        INSERT OR IGNORE INTO framework_synonyms (canonical, alias) VALUES
+            ('quartzcore', 'coreanimation'), ('coreanimation', 'quartzcore'),
+            ('quartz2d', 'coregraphics'), ('coregraphics', 'quartz2d'),
+            ('metalkit', 'metal'), ('uikitcore', 'uikit'), ('appkit', 'cocoa'),
+            ('foundation', 'nsobject'), ('swiftui', 'declarativeui');
         """,
         "CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram_vocab USING fts5vocab(documents_trigram, 'row');",
         "CREATE INDEX IF NOT EXISTS idx_crawl_queue ON crawl_state(status, depth, path);"

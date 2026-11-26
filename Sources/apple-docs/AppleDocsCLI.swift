@@ -21,6 +21,7 @@ struct AppleDocsCLI: AsyncParsableCommand {
             SnapshotSubcommand.self,
             SetupSubcommand.self,
             SyncSubcommand.self,
+            ConsolidateSubcommand.self,
             MCPSubcommand.self,
             WebSubcommand.self
         ]

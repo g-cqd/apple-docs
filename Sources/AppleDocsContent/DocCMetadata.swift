@@ -88,21 +88,33 @@ enum DocCMetadata {
 
     /// `enrichDeclarationTokens`: `typeIdentifier` / `attribute` tokens gain `_resolvedKey` from their
     /// identifier, else from a reference whose (parenthesis-free) title equals the token text.
-    static func enrichedDeclarations(_ declarations: JSON, refs: JSON) -> JSONValue {
+    static func enrichedDeclarations(
+        _ declarations: JSON,
+        refs: JSON,
+        keyMapper: ((String) -> String)? = nil
+    ) -> JSONValue {
         guard let items = declarations.array, !items.isEmpty else { return JSONValue(declarations) }
         var titleToKey: [String: String] = [:]
         refs.forEachMember { id, ref in
             guard id.hasPrefix("doc://"), let url = ref["url"].string, let key = AppleIdentifier.normalize(url),
                 let title = ref["title"].string, !title.isEmpty, !title.contains("(")
             else { return }
-            titleToKey[title] = key
+            titleToKey[title] = keyMapper?(key) ?? key
         }
         return .array(
             items.map { declaration in
                 guard case .object(var object) = JSONValue(declaration), case .array(let tokens)? = object["tokens"]
                 else { return JSONValue(declaration) }
                 object["tokens"] = .array(
-                    tokens.map { enrich($0, kinds: ["typeIdentifier", "attribute"], refs: refs, titles: titleToKey) }
+                    tokens.map {
+                        enrich(
+                            $0,
+                            kinds: ["typeIdentifier", "attribute"],
+                            refs: refs,
+                            titles: titleToKey,
+                            keyMapper: keyMapper
+                        )
+                    }
                 )
                 return .object(object)
             }
@@ -110,18 +122,31 @@ enum DocCMetadata {
     }
 
     /// `enrichTypeTokens`: `typeIdentifier` tokens gain `_resolvedKey` from their identifier.
-    static func enrichedTypeTokens(_ tokens: JSON, refs: JSON) -> JSONValue {
+    static func enrichedTypeTokens(
+        _ tokens: JSON,
+        refs: JSON,
+        keyMapper: ((String) -> String)? = nil
+    ) -> JSONValue {
         guard let items = tokens.array, !items.isEmpty else { return tokens.exists ? JSONValue(tokens) : .array([]) }
-        return .array(items.map { enrich(JSONValue($0), kinds: ["typeIdentifier"], refs: refs, titles: [:]) })
+        return .array(
+            items.map {
+                enrich(JSONValue($0), kinds: ["typeIdentifier"], refs: refs, titles: [:], keyMapper: keyMapper)
+            }
+        )
     }
 
-    private static func enrich(_ token: JSONValue, kinds: Set<String>, refs: JSON, titles: [String: String])
-        -> JSONValue
-    {
+    private static func enrich(
+        _ token: JSONValue,
+        kinds: Set<String>,
+        refs: JSON,
+        titles: [String: String],
+        keyMapper: ((String) -> String)?
+    ) -> JSONValue {
         guard case .object(var object) = token, let kind = object["kind"]?.stringValue, kinds.contains(kind) else {
             return token
         }
-        if let id = object["identifier"]?.stringValue, !id.isEmpty, let key = DocCReferences.resolveKey(id, refs: refs)
+        if let id = object["identifier"]?.stringValue, !id.isEmpty,
+            let key = DocCReferences.resolveKey(id, refs: refs, keyMapper: keyMapper)
         {
             object["_resolvedKey"] = .string(key)
             return .object(object)

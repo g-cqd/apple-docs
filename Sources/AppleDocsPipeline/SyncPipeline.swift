@@ -65,7 +65,20 @@ public enum SyncPipeline: Sendable {
     }
 
     static func convert(_ payload: SourcePayload) throws -> ConvertedDocument {
+        if let preconverted = payload.converted {
+            return preconverted
+        }
         switch payload.encoding {
+            case .preconverted:
+                return ConvertedDocument(
+                    document: DocumentRecord(
+                        key: payload.key,
+                        sourceType: payload.sourceType,
+                        title: payload.fallbackTitle,
+                        url: payload.url
+                    ),
+                    sections: []
+                )
             case .doccJSON:
                 return try DocCJSONConverter.convert(
                     json: payload.body,
