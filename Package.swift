@@ -47,7 +47,7 @@ let package = Package(
             revision: "d8985c489aa19e285214d032ef98855b6b95f30b"
         ),
         .package(url: "https://github.com/g-cqd/URLBuilder.git", revision: "1c0819f41013f3e09aa87a90b3076d14a2525085"),
-        .package(url: "https://github.com/g-cqd/HTTP.git", revision: "e18e598d3a7288343cbd857b83f6c4c9e0cab541"),
+        .package(url: "https://github.com/g-cqd/HTTP.git", revision: "2990fb7e558bc15ccf617f4eab49be0aa9babee9"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.8.2")),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "5.2.0"),

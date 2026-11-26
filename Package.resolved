@@ -1,5 +1,5 @@
 {
-  "originHash" : "3e8cbbcfe3126d3479c63b431961f816d94fc29daeac1412e89b87a6f544eefc",
+  "originHash" : "2c2c31c7f6e8176026b7c8483d7c9033bcd8ee77d1ab6223fc01ddf07cbab340",
   "pins" : [
     {
       "identity" : "aemi",
@@ -86,7 +86,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/g-cqd/HTTP.git",
       "state" : {
-        "revision" : "e18e598d3a7288343cbd857b83f6c4c9e0cab541"
+        "revision" : "2990fb7e558bc15ccf617f4eab49be0aa9babee9"
       }
     },
     {
