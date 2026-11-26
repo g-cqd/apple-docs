@@ -24,7 +24,7 @@ public enum StoredSectionContent {
             return text.isEmpty ? nil : text
         }
         if items.allSatisfy({ $0["name"].string != nil }) {
-            let lines = items.compactMap { DocCSectionExtractor.namedItemLine($0, refs: refs) }
+            let lines = items.compactMap { DocCContentRenderer.namedItemLine($0, refs: refs) }
             return lines.joined(separator: "\n")
         }
         return nil

@@ -1,0 +1,432 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "appstoreserverapi/get-transaction-info",
+  "title": "Get Transaction Info",
+  "kind": "httpRequest",
+  "role": "symbol",
+  "roleHeading": "Web Service Endpoint",
+  "framework": "appstoreserverapi",
+  "url": "https://developer.apple.com/documentation/appstoreserverapi/get-transaction-info",
+  "language": "swift",
+  "abstractText": "Get information about a single transaction for your app.",
+  "declarationText": null,
+  "platformsJson": "{\"app store server api\":\"1.8\"}",
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Discussion",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "Get information about a single transaction for your app.",
+   "contentJson": [
+    {
+     "text": "Get information about a single transaction for your app.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "rest_endpoint",
+   "heading": "URL",
+   "contentText": "GET https://api.storekit.apple.com/inApps/v1/transactions/{transactionId}",
+   "contentJson": [
+    {
+     "kind": "method",
+     "text": "GET"
+    },
+    {
+     "kind": "text",
+     "text": " "
+    },
+    {
+     "kind": "baseURL",
+     "text": "https://api.storekit.apple.com/"
+    },
+    {
+     "kind": "path",
+     "text": "inApps/v1/transactions/"
+    },
+    {
+     "kind": "parameter",
+     "text": "{transactionId}"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "rest_endpoint",
+   "heading": "Sandbox URL",
+   "contentText": "GET https://api.storekit-sandbox.apple.com/inApps/v1/transactions/{transactionId}",
+   "contentJson": [
+    {
+     "kind": "method",
+     "text": "GET"
+    },
+    {
+     "kind": "text",
+     "text": " "
+    },
+    {
+     "kind": "baseURL",
+     "text": "https://api.storekit-sandbox.apple.com/"
+    },
+    {
+     "kind": "path",
+     "text": "inApps/v1/transactions/"
+    },
+    {
+     "kind": "parameter",
+     "text": "{transactionId}"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "rest_parameters",
+   "heading": "Path Parameters",
+   "contentText": "transactionId: The identifier of a transaction that belongs to the customer, and which may be an original transaction identifier (originalTransactionId).",
+   "contentJson": [
+    {
+     "name": "transactionId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/transactionId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:transactionId",
+       "text": "transactionId",
+       "_resolvedKey": "appstoreserverapi/transactionid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The identifier of a transaction that belongs to the customer, and which may be an original transaction identifier (",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/originalTransactionId",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "originalTransactionId",
+         "_resolvedKey": "appstoreserverapi/originaltransactionid"
+        },
+        {
+         "text": ").",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": true,
+     "source": "path",
+     "attributes": []
+    }
+   ],
+   "sortOrder": 6
+  },
+  {
+   "sectionKind": "rest_responses",
+   "heading": "Response Codes",
+   "contentText": "200 OK: Request succeeded.\n400 Bad Request: Invalid request.\n401 Unauthorized: The JSON Web Token (JWT) in the authorization header is invalid. For more information, see Generating JSON Web Tokens for API requests.\n404 Not Found: The transaction identifier wasn’t found.\n429 : The request exceeded the rate limit.\n500 Internal Server Error: Server error. Try again later.",
+   "contentJson": [
+    {
+     "status": 200,
+     "reason": "OK",
+     "mimeType": "application/json",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/TransactionInfoResponse",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:TransactionInfoResponse",
+       "text": "TransactionInfoResponse",
+       "_resolvedKey": "appstoreserverapi/transactioninforesponse"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Request succeeded.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    },
+    {
+     "status": 400,
+     "reason": "Bad Request",
+     "mimeType": "application/json",
+     "type": [
+      {
+       "kind": "text",
+       "text": "("
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/InvalidTransactionIdError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:InvalidTransactionIdError",
+       "text": "InvalidTransactionIdError",
+       "_resolvedKey": "appstoreserverapi/invalidtransactioniderror"
+      },
+      {
+       "kind": "text",
+       "text": " | "
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/AppTransactionIdNotSupportedError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:AppTransactionIdNotSupportedError",
+       "text": "AppTransactionIdNotSupportedError",
+       "_resolvedKey": "appstoreserverapi/apptransactionidnotsupportederror"
+      },
+      {
+       "kind": "text",
+       "text": ")"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Invalid request.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    },
+    {
+     "status": 401,
+     "reason": "Unauthorized",
+     "mimeType": null,
+     "type": [],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The JSON Web Token (JWT) in the authorization header is invalid. For more information, see ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/generating-json-web-tokens-for-api-requests",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Generating JSON Web Tokens for API requests",
+         "_resolvedKey": "appstoreserverapi/generating-json-web-tokens-for-api-requests"
+        },
+        {
+         "text": ".",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    },
+    {
+     "status": 404,
+     "reason": "Not Found",
+     "mimeType": "application/json",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/TransactionIdNotFoundError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:TransactionIdNotFoundError",
+       "text": "TransactionIdNotFoundError",
+       "_resolvedKey": "appstoreserverapi/transactionidnotfounderror"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The transaction identifier wasn’t found.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    },
+    {
+     "status": 429,
+     "reason": null,
+     "mimeType": "application/json",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/RateLimitExceededError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:RateLimitExceededError",
+       "text": "RateLimitExceededError",
+       "_resolvedKey": "appstoreserverapi/ratelimitexceedederror"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The request exceeded the rate limit.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    },
+    {
+     "status": 500,
+     "reason": "Internal Server Error",
+     "mimeType": "application/json",
+     "type": [
+      {
+       "kind": "text",
+       "text": "("
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/GeneralInternalError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:GeneralInternalError",
+       "text": "GeneralInternalError",
+       "_resolvedKey": "appstoreserverapi/generalinternalerror"
+      },
+      {
+       "kind": "text",
+       "text": " | "
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/GeneralInternalRetryableError",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:GeneralInternalRetryableError",
+       "text": "GeneralInternalRetryableError",
+       "_resolvedKey": "appstoreserverapi/generalinternalretryableerror"
+      },
+      {
+       "kind": "text",
+       "text": ")"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Server error. Try again later.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 7
+  },
+  {
+   "sectionKind": "mentioned_in",
+   "heading": "Mentioned in",
+   "contentText": "App Store Server API changelog\nIdentifying rate limits",
+   "contentJson": [
+    {
+     "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/app-store-server-api-changelog",
+     "key": "appstoreserverapi/app-store-server-api-changelog",
+     "title": "App Store Server API changelog"
+    },
+    {
+     "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/identifying-rate-limits",
+     "key": "appstoreserverapi/identifying-rate-limits",
+     "title": "Identifying rate limits"
+    }
+   ],
+   "sortOrder": 8
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Discussion",
+   "contentText": "Discussion\nUse this endpoint to get transaction information for any transaction identifier, including original transaction identifiers.  This endpoint supports all in-app purchase types, including consumable, non-consumable, non-renewing subscriptions, and auto-renewable subscriptions. It also supports transactions that your app marked as finished using finish() or finishTransaction(_:) in StoreKit.\n",
+   "contentJson": [
+    {
+     "anchor": "Discussion",
+     "level": 2,
+     "text": "Discussion",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Use this endpoint to get transaction information for any transaction identifier, including original transaction identifiers.  This endpoint supports all in-app purchase types, including consumable, non-consumable, non-renewing subscriptions, and auto-renewable subscriptions. It also supports transactions that your app marked as finished using ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/StoreKit/Transaction/finish()",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "finish()",
+       "_resolvedKey": "storekit/transaction/finish()"
+      },
+      {
+       "text": " or ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/StoreKit/SKPaymentQueue/finishTransaction(_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "finishTransaction(_:)",
+       "_resolvedKey": "storekit/skpaymentqueue/finishtransaction(_:)"
+      },
+      {
+       "text": " in StoreKit.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 9
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Transaction information\nTransactionInfoResponse",
+   "contentJson": [
+    {
+     "title": "Transaction information",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/TransactionInfoResponse",
+       "key": "appstoreserverapi/transactioninforesponse",
+       "title": "TransactionInfoResponse"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 10
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "appstoreserverapi/get-transaction-info",
+   "toKey": "appstoreserverapi/transactioninforesponse",
+   "relationType": "see_also",
+   "section": "Transaction information",
+   "sortOrder": 0
+  }
+ ]
+}

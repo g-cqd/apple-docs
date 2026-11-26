@@ -43,33 +43,6 @@ struct DocCSectionParityTests {
         }
         """
 
-    @Test func `emits every Bun section kind in Bun order with resolved reference titles`() throws {
-        let converted = try DocCJSONConverter.convert(
-            json: Array(Self.payload.utf8),
-            key: try DocumentKey("compression/algorithm")
-        )
-        #expect(
-            converted.sections.map(\.sectionKind) == [
-                "abstract", "declaration", "possible_values", "mentioned_in",
-                "discussion", "topics", "relationships", "see_also"
-            ]
-        )
-        #expect(converted.sections.map(\.sortOrder) == Array(0 ..< 8))
-        #expect(converted.document.abstractText == "Algorithms used by compression_encode_buffer(_:_:_:_:_:_:)")
-        #expect(converted.document.declarationText == "enum Algorithm")
-
-        let byKind = Dictionary(uniqueKeysWithValues: converted.sections.map { ($0.sectionKind, $0) })
-        #expect(byKind["possible_values"]?.contentText == "- `lzfse`: Apple's codec.")
-        #expect(byKind["mentioned_in"]?.contentText == "- Compressing files")
-        #expect(byKind["discussion"]?.heading == "Choose an algorithm")
-        #expect(byKind["discussion"]?.contentText == "- Speed\n- **Ratio**")
-        #expect(byKind["topics"]?.contentText == "#### Codecs\n- lzfse")
-        #expect(byKind["relationships"]?.contentText == "#### Conforms To\n- Sendable")
-        #expect(!converted.sections.contains { $0.contentText.contains("doc://") })
-        // Bun relation_type values.
-        #expect(converted.relationships.map(\.relationType) == ["child", "conforms_to", "see_also"])
-    }
-
     @Test func `rendered markdown does not duplicate abstract or declaration sections`() throws {
         let converted = try DocCJSONConverter.convert(
             json: Array(Self.payload.utf8),
@@ -98,33 +71,5 @@ struct DocCSectionParityTests {
             """
         let converted = try DocCJSONConverter.convert(json: Array(json.utf8), key: try DocumentKey("kit"))
         #expect(converted.discoveredKeys.map(\.rawValue) == ["kit/live"])
-    }
-
-    @Test func `keeps titled link groups that have no identifiers (Bun parity, CoreML regression)`() throws {
-        let json = """
-            {"metadata": {"title": "Guide"},
-             "seeAlsoSections": [{"anchor": "Optimization", "generated": true, "identifiers": [], "title": "Optimization"}]}
-            """
-        let converted = try DocCJSONConverter.convert(json: Array(json.utf8), key: try DocumentKey("coreml/guide"))
-        let seeAlso = converted.sections.first { $0.sectionKind == "see_also" }
-        #expect(seeAlso?.contentText == "#### Optimization")
-    }
-
-    @Test func `a target listed in two topic groups keeps its last group, like Bun's upsert`() throws {
-        let json = """
-            {"metadata": {"title": "PDFSelection"},
-             "topicSections": [
-                {"title": "Getting Information", "identifiers": ["doc://p/documentation/PDFKit/PDFSelection/color"]},
-                {"title": "Managing Drawing", "identifiers": ["doc://p/documentation/PDFKit/PDFSelection/color"]}],
-             "references": {"doc://p/documentation/PDFKit/PDFSelection/color":
-                {"title": "color", "url": "/documentation/pdfkit/pdfselection/color"}}}
-            """
-        let converted = try DocCJSONConverter.convert(
-            json: Array(json.utf8),
-            key: try DocumentKey("pdfkit/pdfselection")
-        )
-        #expect(converted.relationships.count == 1)
-        #expect(converted.relationships.first?.section == "Managing Drawing")
-        #expect(converted.relationships.first?.sortOrder == 1)
     }
 }

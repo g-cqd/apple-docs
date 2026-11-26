@@ -102,8 +102,10 @@ struct Phase3SyncTests {
             key: try DocumentKey("swiftui/navigationstack")
         )
         #expect(converted.document.usr == "s:7SwiftUI15NavigationStackV")
-        #expect(converted.sections.contains { $0.sectionKind == "parameters" && $0.contentText.contains("`root`") })
-        #expect(converted.sections.contains { $0.contentText.contains("> **Important:** Use iOS 16+.") })
+        #expect(
+            converted.sections.contains { $0.sectionKind == "parameters" && $0.contentText == "root: The root view." }
+        )
+        #expect(converted.sections.contains { $0.contentText == "important: Use iOS 16+.\n" })
         #expect(converted.relationships.count == 1)
         #expect(converted.relationships[0].toKey.rawValue == "swiftui/navigationpath")
     }

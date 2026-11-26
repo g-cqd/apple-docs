@@ -85,7 +85,9 @@ struct WebCorpusFixture {
             contentText: "Overview Displays text. flattened",
             contentJSON: #"""
                 [{"type":"heading","text":"Overview","level":2},{"type":"paragraph","inlineContent":[
-                {"type":"text","text":"Displays "},{"type":"codeVoice","code":"String"},{"type":"text","text":" values."}]}]
+                {"type":"text","text":"Displays "},{"type":"codeVoice","code":"String"},{"type":"text","text":" values in a "},
+                {"type":"reference","identifier":"doc://s/documentation/SwiftUI/View","_resolvedTitle":"View","_resolvedKey":"swiftui/view"},
+                {"type":"text","text":"."}]}]
                 """#,
             sortOrder: 0
         ),

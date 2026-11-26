@@ -144,7 +144,9 @@ struct WebPagesTests {
 
         let (status, html, _) = await get(responder, "/doc/swiftui/text")
         #expect(status == .ok)
-        #expect(html.contains("<p>Displays <code>String</code> values.</p>"))
+        #expect(
+            html.contains(#"<p>Displays <code>String</code> values in a <a href="/doc/swiftui/view">View</a>.</p>"#)
+        )
         #expect(!html.contains("flattened"))
         #expect(
             html.contains(

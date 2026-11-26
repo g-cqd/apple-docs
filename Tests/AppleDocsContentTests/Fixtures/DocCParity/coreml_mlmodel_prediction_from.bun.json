@@ -1,0 +1,362 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "coreml/mlmodel/prediction(from:)",
+  "title": "prediction(from:)",
+  "kind": "method",
+  "role": "symbol",
+  "roleHeading": "Instance Method",
+  "framework": "coreml",
+  "url": "https://developer.apple.com/documentation/coreml/mlmodel/prediction(from:)",
+  "language": "swift",
+  "abstractText": null,
+  "declarationText": "func prediction(from input: any MLFeatureProvider) throws -> any MLFeatureProvider",
+  "platformsJson": "{\"ios\":\"11.0\",\"ipados\":\"11.0\",\"maccatalyst\":\"13.1\",\"macos\":\"10.13\",\"tvos\":\"11.0\",\"visionos\":\"1.0\",\"watchos\":\"4.0\"}",
+  "minIos": "11.0",
+  "minMacos": "10.13",
+  "minWatchos": "4.0",
+  "minTvos": "11.0",
+  "minVisionos": "1.0",
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 2,
+  "headings": null,
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "func prediction(from input: any MLFeatureProvider) throws -> any MLFeatureProvider",
+   "contentJson": [
+    {
+     "languages": [
+      "swift"
+     ],
+     "otherDeclarations": {
+      "declarations": [
+       {
+        "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/prediction(from:)-7vsm8",
+        "tokens": [
+         {
+          "kind": "keyword",
+          "text": "func"
+         },
+         {
+          "kind": "text",
+          "text": " "
+         },
+         {
+          "kind": "identifier",
+          "text": "prediction"
+         },
+         {
+          "kind": "text",
+          "text": "("
+         },
+         {
+          "kind": "externalParam",
+          "text": "from"
+         },
+         {
+          "kind": "text",
+          "text": " "
+         },
+         {
+          "highlight": "changed",
+          "kind": "internalParam",
+          "text": "inputs"
+         },
+         {
+          "kind": "text",
+          "text": ": "
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": "["
+         },
+         {
+          "highlight": "changed",
+          "identifier": "doc://com.apple.documentation/documentation/Swift/String",
+          "kind": "typeIdentifier",
+          "preciseIdentifier": "s:SS",
+          "text": "String"
+         },
+         {
+          "kind": "text",
+          "text": " "
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": ": "
+         },
+         {
+          "highlight": "changed",
+          "identifier": "doc://com.apple.coreml/documentation/CoreML/MLTensor",
+          "kind": "typeIdentifier",
+          "preciseIdentifier": "s:6CoreML8MLTensorV",
+          "text": "MLTensor"
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": "]"
+         },
+         {
+          "kind": "text",
+          "text": ") "
+         },
+         {
+          "highlight": "changed",
+          "kind": "keyword",
+          "text": "async"
+         },
+         {
+          "kind": "text",
+          "text": " "
+         },
+         {
+          "kind": "keyword",
+          "text": "throws"
+         },
+         {
+          "kind": "text",
+          "text": " -> "
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": "["
+         },
+         {
+          "highlight": "changed",
+          "identifier": "doc://com.apple.documentation/documentation/Swift/String",
+          "kind": "typeIdentifier",
+          "preciseIdentifier": "s:SS",
+          "text": "String"
+         },
+         {
+          "kind": "text",
+          "text": " "
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": ": "
+         },
+         {
+          "highlight": "changed",
+          "identifier": "doc://com.apple.coreml/documentation/CoreML/MLTensor",
+          "kind": "typeIdentifier",
+          "preciseIdentifier": "s:6CoreML8MLTensorV",
+          "text": "MLTensor"
+         },
+         {
+          "highlight": "changed",
+          "kind": "text",
+          "text": "]"
+         }
+        ]
+       }
+      ],
+      "displayIndex": 0
+     },
+     "platforms": [
+      "iOS",
+      "iPadOS",
+      "Mac Catalyst",
+      "macOS",
+      "tvOS",
+      "visionOS",
+      "watchOS"
+     ],
+     "tokens": [
+      {
+       "kind": "keyword",
+       "text": "func"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "identifier",
+       "text": "prediction"
+      },
+      {
+       "kind": "text",
+       "text": "("
+      },
+      {
+       "kind": "externalParam",
+       "text": "from"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "highlight": "changed",
+       "kind": "internalParam",
+       "text": "input"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "highlight": "changed",
+       "kind": "text",
+       "text": "any"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "highlight": "changed",
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLFeatureProvider",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "c:objc(pl)MLFeatureProvider",
+       "text": "MLFeatureProvider",
+       "_resolvedKey": "coreml/mlfeatureprovider"
+      },
+      {
+       "kind": "text",
+       "text": ") "
+      },
+      {
+       "kind": "keyword",
+       "text": "throws"
+      },
+      {
+       "kind": "text",
+       "text": " -> "
+      },
+      {
+       "highlight": "changed",
+       "kind": "text",
+       "text": "any"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "highlight": "changed",
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLFeatureProvider",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "c:objc(pl)MLFeatureProvider",
+       "text": "MLFeatureProvider",
+       "_resolvedKey": "coreml/mlfeatureprovider"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Making predictions\nprediction(from:options:)\npredictions(fromBatch:)\npredictions(from:options:)\nprediction(from:using:)\nprediction(from:using:options:)\nMLPredictionOptions\nBackground Inference",
+   "contentJson": [
+    {
+     "title": "Making predictions",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/prediction(from:options:)",
+       "key": "coreml/mlmodel/prediction(from:options:)",
+       "title": "prediction(from:options:)"
+      },
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/predictions(fromBatch:)",
+       "key": "coreml/mlmodel/predictions(frombatch:)",
+       "title": "predictions(fromBatch:)"
+      },
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/predictions(from:options:)",
+       "key": "coreml/mlmodel/predictions(from:options:)",
+       "title": "predictions(from:options:)"
+      },
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/prediction(from:using:)",
+       "key": "coreml/mlmodel/prediction(from:using:)",
+       "title": "prediction(from:using:)"
+      },
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLModel/prediction(from:using:options:)",
+       "key": "coreml/mlmodel/prediction(from:using:options:)",
+       "title": "prediction(from:using:options:)"
+      },
+      {
+       "identifier": "doc://com.apple.coreml/documentation/CoreML/MLPredictionOptions",
+       "key": "coreml/mlpredictionoptions",
+       "title": "MLPredictionOptions"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/BundleResources/Entitlements/com.apple.developer.background-tasks.continued-processing.inference",
+       "key": "bundleresources/entitlements/com.apple.developer.background-tasks.continued-processing.inference",
+       "title": "Background Inference"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 4
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlmodel/prediction(from:options:)",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlmodel/predictions(frombatch:)",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlmodel/predictions(from:options:)",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlmodel/prediction(from:using:)",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlmodel/prediction(from:using:options:)",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "coreml/mlpredictionoptions",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 5
+  },
+  {
+   "fromKey": "coreml/mlmodel/prediction(from:)",
+   "toKey": "bundleresources/entitlements/com.apple.developer.background-tasks.continued-processing.inference",
+   "relationType": "see_also",
+   "section": "Making predictions",
+   "sortOrder": 6
+  }
+ ]
+}

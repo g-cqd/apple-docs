@@ -1,0 +1,1252 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "appstoreserverapi/jwstransactiondecodedpayload",
+  "title": "JWSTransactionDecodedPayload",
+  "kind": "dictionary",
+  "role": "symbol",
+  "roleHeading": "Object",
+  "framework": "appstoreserverapi",
+  "url": "https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload",
+  "language": "swift",
+  "abstractText": "A decoded payload that contains transaction information.",
+  "declarationText": "object JWSTransactionDecodedPayload",
+  "platformsJson": "{\"app store server api\":\"1.0\"}",
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Discussion",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "A decoded payload that contains transaction information.",
+   "contentJson": [
+    {
+     "text": "A decoded payload that contains transaction information.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "object JWSTransactionDecodedPayload",
+   "contentJson": [
+    {
+     "languages": [
+      "data"
+     ],
+     "platforms": [
+      "Unsupported OS: App Store Server API"
+     ],
+     "tokens": [
+      {
+       "kind": "text",
+       "text": "object "
+      },
+      {
+       "kind": "identifier",
+       "text": "JWSTransactionDecodedPayload"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "properties",
+   "heading": "Properties",
+   "contentText": "additionalTransactionReason: The reason that more than one transaction represents the subscription period. This field is present only when the group purchaser of a multiseat purchase added seats during the period.\nappAccountToken: A UUID you create at the time of purchase that associates the transaction with a customer on your own service. If your app doesn’t provide an appAccountToken, this field is omitted. For more information, see appAccountToken(_:).\nappTransactionId: The unique identifier of the app download transaction.\nbundleId: The bundle identifier of the app.\nbillingPlanType: The billing plan of the subscription purchase, either billed up front or billed monthly with a 12-month commitment.\ncurrency: The three-letter ISO 4217 currency code associated with the price parameter. This value is present only if price is present.\ncommitmentInfo: Information about the commitment, such as the current billing period and when the commitment expires, for a monthly subscription with a 12-month commitment.\nenvironment: The server environment, either sandbox or production.\nexpiresDate: The UNIX time, in milliseconds, that the subscription expires or renews.\ninAppOwnershipType: A string that describes whether the transaction was purchased by the customer, was assigned to them by an organization or group, or is available to them through Family Sharing.\nisUpgraded: A Boolean value that indicates whether the customer upgraded to another subscription.\nmultiSeatInfo: Information about the seats in the transaction, for a subscription that a customer buys as a multiseat purchase.\nofferDiscountType: The payment mode you configure for the offer.\nofferIdentifier: The identifier that contains the offer code or the promotional offer identifier.\nofferPeriod: The duration of the offer applied to the transaction.\nofferType: A value that represents the promotional offer type.\noriginalPurchaseDate: The UNIX time, in milliseconds, that represents the purchase date of the original transaction identifier.\noriginalTransactionId: The transaction identifier of the original purchase.\npreviousOriginalTransactionId: The subscription’s original transaction identifier, before you migrated the subscription.\nprice: An integer value that represents the price multiplied by 1000 of the in-app purchase or subscription offer you configured in App Store Connect and that the system records at the time of the purchase. For more information, see price. The currency parameter indicates the currency of this price.\nproductId: The unique identifier of the product.\npurchaseDate: The UNIX time, in milliseconds, that the App Store charged the customer’s account for a purchase, restored product, subscription, or subscription renewal after a lapse.\nquantity: The number of products or seats the customer purchased.\nrevocationDate: The UNIX time, in milliseconds, that the App Store refunded the transaction or revoked it from Family Sharing.\nrevocationPercentage: The percentage, in milliunits, of the transaction that the App Store has refunded or revoked.\nrevocationReason: The reason that the App Store refunded the transaction or revoked it from Family Sharing.\nrevocationType: The type of the refund or revocation that applies to the transaction.\nsignedDate: The UNIX time, in milliseconds, that the App Store signed the JSON Web Signature (JWS) data.\nstorefront: The three-letter code that represents the country or region associated with the App Store storefront for the purchase.\nstorefrontId: An Apple-defined value that uniquely identifies the App Store storefront associated with the purchase.\nsubscriptionGroupIdentifier: The identifier of the subscription group to which the subscription belongs.\ntransactionId: The unique identifier of the transaction.\ntransactionReason: The reason for the purchase transaction, which indicates whether it’s a customer’s purchase or a renewal for an auto-renewable subscription that the system initiates.\ntype: The type of the in-app purchase.\nwebOrderLineItemId: The unique identifier of subscription purchase events across devices, including subscription renewals.\nadvancedCommerceInfo: Transaction information that is present only for Advanced Commerce SKUs.",
+   "contentJson": [
+    {
+     "name": "additionalTransactionReason",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/additionalTransactionReason",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:additionalTransactionReason",
+       "text": "additionalTransactionReason",
+       "_resolvedKey": "appstoreserverapi/additionaltransactionreason"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The reason that more than one transaction represents the subscription period. This field is present only when the group purchaser of a multiseat purchase added seats during the period.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "appAccountToken",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/appAccountToken",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:appAccountToken",
+       "text": "appAccountToken",
+       "_resolvedKey": "appstoreserverapi/appaccounttoken"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "A UUID you create at the time of purchase that associates the transaction with a customer on your own service. If your app doesn’t provide an ",
+         "type": "text"
+        },
+        {
+         "code": "appAccountToken",
+         "type": "codeVoice"
+        },
+        {
+         "text": ", this field is omitted. For more information, see ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.documentation/documentation/StoreKit/Product/PurchaseOption/appAccountToken(_:)",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "appAccountToken(_:)",
+         "_resolvedKey": "storekit/product/purchaseoption/appaccounttoken(_:)"
+        },
+        {
+         "text": ".",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "appTransactionId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/appTransactionId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:appTransactionId",
+       "text": "appTransactionId",
+       "_resolvedKey": "appstoreserverapi/apptransactionid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The unique identifier of the app download transaction.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "bundleId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/bundleId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:bundleId",
+       "text": "bundleId",
+       "_resolvedKey": "appstoreserverapi/bundleid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The bundle identifier of the app.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "billingPlanType",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/billingPlanType",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:billingPlanType",
+       "text": "billingPlanType",
+       "_resolvedKey": "appstoreserverapi/billingplantype"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The billing plan of the subscription purchase, either billed up front or billed monthly with a 12-month commitment.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "currency",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/currency",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:currency",
+       "text": "currency",
+       "_resolvedKey": "appstoreserverapi/currency"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The three-letter ISO 4217 currency code associated with the ",
+         "type": "text"
+        },
+        {
+         "code": "price",
+         "type": "codeVoice"
+        },
+        {
+         "text": " parameter. This value is present only if ",
+         "type": "text"
+        },
+        {
+         "code": "price",
+         "type": "codeVoice"
+        },
+        {
+         "text": " is present.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "commitmentInfo",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/TransactionCommitmentInfo",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:TransactionCommitmentInfo",
+       "text": "TransactionCommitmentInfo",
+       "_resolvedKey": "appstoreserverapi/transactioncommitmentinfo"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Information about the commitment, such as the current billing period and when the commitment expires, for a monthly subscription with a 12-month commitment.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "environment",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/environment",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:environment",
+       "text": "environment",
+       "_resolvedKey": "appstoreserverapi/environment"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The server environment, either sandbox or production.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "expiresDate",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/expiresDate",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:expiresDate",
+       "text": "expiresDate",
+       "_resolvedKey": "appstoreserverapi/expiresdate"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The UNIX time, in milliseconds, that the subscription expires or renews.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "inAppOwnershipType",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/inAppOwnershipType",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:inAppOwnershipType",
+       "text": "inAppOwnershipType",
+       "_resolvedKey": "appstoreserverapi/inappownershiptype"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "A string that describes whether the transaction was purchased by the customer, was assigned to them by an organization or group, or is available to them through Family Sharing.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "isUpgraded",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/isUpgraded",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:isUpgraded",
+       "text": "isUpgraded",
+       "_resolvedKey": "appstoreserverapi/isupgraded"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "A Boolean value that indicates whether the customer upgraded to another subscription.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "multiSeatInfo",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/TransactionMultiSeatInfo",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:TransactionMultiSeatInfo",
+       "text": "TransactionMultiSeatInfo",
+       "_resolvedKey": "appstoreserverapi/transactionmultiseatinfo"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Information about the seats in the transaction, for a subscription that a customer buys as a multiseat purchase.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "offerDiscountType",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/offerDiscountType",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:offerDiscountType",
+       "text": "offerDiscountType",
+       "_resolvedKey": "appstoreserverapi/offerdiscounttype"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The payment mode you configure for the offer.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "offerIdentifier",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/offerIdentifier",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:offerIdentifier",
+       "text": "offerIdentifier",
+       "_resolvedKey": "appstoreserverapi/offeridentifier"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The identifier that contains the offer code or the promotional offer identifier.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "offerPeriod",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/offerPeriod",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:offerPeriod",
+       "text": "offerPeriod",
+       "_resolvedKey": "appstoreserverapi/offerperiod"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The duration of the offer applied to the transaction.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "offerType",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/offerType",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:offerType",
+       "text": "offerType",
+       "_resolvedKey": "appstoreserverapi/offertype"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "A value that represents the promotional offer type.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "originalPurchaseDate",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/originalPurchaseDate",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:originalPurchaseDate",
+       "text": "originalPurchaseDate",
+       "_resolvedKey": "appstoreserverapi/originalpurchasedate"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The UNIX time, in milliseconds, that represents the purchase date of the original transaction identifier.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "originalTransactionId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/originalTransactionId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:originalTransactionId",
+       "text": "originalTransactionId",
+       "_resolvedKey": "appstoreserverapi/originaltransactionid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The transaction identifier of the original purchase.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "previousOriginalTransactionId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/previousOriginalTransactionId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:previousOriginalTransactionId",
+       "text": "previousOriginalTransactionId",
+       "_resolvedKey": "appstoreserverapi/previousoriginaltransactionid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The subscription’s original transaction identifier, before you migrated the subscription.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "price",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/price",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:price",
+       "text": "price",
+       "_resolvedKey": "appstoreserverapi/price"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "An integer value that represents the price multiplied by 1000 of the in-app purchase or subscription offer you configured in App Store Connect and that the system records at the time of the purchase. For more information, see ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.documentation/documentation/AppStoreServerNotifications/price",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "price",
+         "_resolvedKey": "appstoreservernotifications/price"
+        },
+        {
+         "text": ". The ",
+         "type": "text"
+        },
+        {
+         "code": "currency",
+         "type": "codeVoice"
+        },
+        {
+         "text": " parameter indicates the currency of this price.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "productId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/productId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:productId",
+       "text": "productId",
+       "_resolvedKey": "appstoreserverapi/productid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The unique identifier of the product.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "purchaseDate",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/purchaseDate",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:purchaseDate",
+       "text": "purchaseDate",
+       "_resolvedKey": "appstoreserverapi/purchasedate"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The UNIX time, in milliseconds, that the App Store charged the customer’s account for a purchase, restored product, subscription, or subscription renewal after a lapse.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "quantity",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/quantity",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:quantity",
+       "text": "quantity",
+       "_resolvedKey": "appstoreserverapi/quantity"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The number of products or seats the customer purchased.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "revocationDate",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/revocationDate",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:revocationDate",
+       "text": "revocationDate",
+       "_resolvedKey": "appstoreserverapi/revocationdate"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The UNIX time, in milliseconds, that the App Store refunded the transaction or revoked it from Family Sharing.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "revocationPercentage",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/revocationPercentage",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:revocationPercentage",
+       "text": "revocationPercentage",
+       "_resolvedKey": "appstoreserverapi/revocationpercentage"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The percentage, in milliunits, of the transaction that the App Store has refunded or revoked.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [
+      {
+       "kind": "minimum",
+       "value": "0"
+      },
+      {
+       "kind": "maximum",
+       "value": "100000"
+      }
+     ],
+     "introducedVersion": null
+    },
+    {
+     "name": "revocationReason",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/revocationReason",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:revocationReason",
+       "text": "revocationReason",
+       "_resolvedKey": "appstoreserverapi/revocationreason"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The reason that the App Store refunded the transaction or revoked it from Family Sharing.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "revocationType",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/revocationType",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:revocationType",
+       "text": "revocationType",
+       "_resolvedKey": "appstoreserverapi/revocationtype"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The type of the refund or revocation that applies to the transaction.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "signedDate",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/signedDate",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:signedDate",
+       "text": "signedDate",
+       "_resolvedKey": "appstoreserverapi/signeddate"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The UNIX time, in milliseconds, that the App Store signed the JSON Web Signature (JWS) data.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "storefront",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/storefront",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:storefront",
+       "text": "storefront",
+       "_resolvedKey": "appstoreserverapi/storefront"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The three-letter code that represents the country or region associated with the App Store storefront for the purchase.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "storefrontId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/storefrontId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:storefrontId",
+       "text": "storefrontId",
+       "_resolvedKey": "appstoreserverapi/storefrontid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "An Apple-defined value that uniquely identifies the App Store storefront associated with the purchase.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "subscriptionGroupIdentifier",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/subscriptionGroupIdentifier",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:subscriptionGroupIdentifier",
+       "text": "subscriptionGroupIdentifier",
+       "_resolvedKey": "appstoreserverapi/subscriptiongroupidentifier"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The identifier of the subscription group to which the subscription belongs.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "transactionId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/transactionId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:transactionId",
+       "text": "transactionId",
+       "_resolvedKey": "appstoreserverapi/transactionid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The unique identifier of the transaction.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "transactionReason",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/transactionReason",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:transactionReason",
+       "text": "transactionReason",
+       "_resolvedKey": "appstoreserverapi/transactionreason"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The reason for the purchase transaction, which indicates whether it’s a customer’s purchase or a renewal for an auto-renewable subscription that the system initiates.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "type",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/type",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:type",
+       "text": "type",
+       "_resolvedKey": "appstoreserverapi/type"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The type of the in-app purchase.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "webOrderLineItemId",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/webOrderLineItemId",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:webOrderLineItemId",
+       "text": "webOrderLineItemId",
+       "_resolvedKey": "appstoreserverapi/weborderlineitemid"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The unique identifier of subscription purchase events across devices, including subscription renewals.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    },
+    {
+     "name": "advancedCommerceInfo",
+     "type": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/advancedCommerceTransactionInfo",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "data:app_store_server_api:advancedCommerceTransactionInfo",
+       "text": "advancedCommerceTransactionInfo",
+       "_resolvedKey": "appstoreserverapi/advancedcommercetransactioninfo"
+      }
+     ],
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Transaction information that is present only for Advanced Commerce SKUs.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "required": false,
+     "attributes": [],
+     "introducedVersion": null
+    }
+   ],
+   "sortOrder": 3
+  },
+  {
+   "sectionKind": "mentioned_in",
+   "heading": "Mentioned in",
+   "contentText": "App Store Server API changelog",
+   "contentJson": [
+    {
+     "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/app-store-server-api-changelog",
+     "key": "appstoreserverapi/app-store-server-api-changelog",
+     "title": "App Store Server API changelog"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Discussion",
+   "contentText": "Discussion\nimportant: Don’t use the price or currency values for any revenue reconciliation or recognition. App Store Connect reporting is your source of record for financial and accounting purposes. For more information, see Overview of reporting tools.\n",
+   "contentJson": [
+    {
+     "anchor": "Discussion",
+     "level": 2,
+     "text": "Discussion",
+     "type": "heading"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "Don’t use the ",
+         "type": "text"
+        },
+        {
+         "code": "price",
+         "type": "codeVoice"
+        },
+        {
+         "text": " or ",
+         "type": "text"
+        },
+        {
+         "code": "currency",
+         "type": "codeVoice"
+        },
+        {
+         "text": " values for any revenue reconciliation or recognition. App Store Connect reporting is your source of record for financial and accounting purposes. For more information, see ",
+         "type": "text"
+        },
+        {
+         "identifier": "https://developer.apple.com/help/app-store-connect/measure-app-performance/overview-of-reporting-tools",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Overview of reporting tools",
+         "_resolvedKey": null
+        },
+        {
+         "text": ".",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "Important",
+     "style": "important",
+     "type": "aside"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "JWS headers and payloads\nJWSDecodedHeader\nJWSAppTransaction\nJWSAppTransactionDecodedPayload\nJWSTransaction\nJWSRenewalInfo\nJWSRenewalInfoDecodedPayload\nData types",
+   "contentJson": [
+    {
+     "title": "JWS headers and payloads",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSDecodedHeader",
+       "key": "appstoreserverapi/jwsdecodedheader",
+       "title": "JWSDecodedHeader"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSAppTransaction",
+       "key": "appstoreserverapi/jwsapptransaction",
+       "title": "JWSAppTransaction"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSAppTransactionDecodedPayload",
+       "key": "appstoreserverapi/jwsapptransactiondecodedpayload",
+       "title": "JWSAppTransactionDecodedPayload"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSTransaction",
+       "key": "appstoreserverapi/jwstransaction",
+       "title": "JWSTransaction"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSRenewalInfo",
+       "key": "appstoreserverapi/jwsrenewalinfo",
+       "title": "JWSRenewalInfo"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/JWSRenewalInfoDecodedPayload",
+       "key": "appstoreserverapi/jwsrenewalinfodecodedpayload",
+       "title": "JWSRenewalInfoDecodedPayload"
+      },
+      {
+       "identifier": "doc://com.apple.appstoreserverapi/documentation/AppStoreServerAPI/data-types",
+       "key": "appstoreserverapi/data-types",
+       "title": "Data types"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwsdecodedheader",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwsapptransaction",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwsapptransactiondecodedpayload",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwstransaction",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwsrenewalinfo",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/jwsrenewalinfodecodedpayload",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 5
+  },
+  {
+   "fromKey": "appstoreserverapi/jwstransactiondecodedpayload",
+   "toKey": "appstoreserverapi/data-types",
+   "relationType": "see_also",
+   "section": "JWS headers and payloads",
+   "sortOrder": 6
+  }
+ ]
+}

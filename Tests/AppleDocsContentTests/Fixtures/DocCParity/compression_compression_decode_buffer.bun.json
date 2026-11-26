@@ -1,0 +1,580 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+  "title": "compression_decode_buffer(_:_:_:_:_:_:)",
+  "kind": "func",
+  "role": "symbol",
+  "roleHeading": "Function",
+  "framework": "compression",
+  "url": "https://developer.apple.com/documentation/compression/compression_decode_buffer(_:_:_:_:_:_:)",
+  "language": "swift",
+  "abstractText": "Decompresses the contents of a source buffer into a destination buffer.",
+  "declarationText": "func compression_decode_buffer(_ dst_buffer: UnsafeMutablePointer<UInt8>, _ dst_size: Int, _ src_buffer: UnsafePointer<UInt8>, _ src_size: Int, _ scratch_buffer: UnsafeMutableRawPointer?, _ algorithm: compression_algorithm) -> Int",
+  "platformsJson": "{\"ios\":\"9.0\",\"ipados\":\"9.0\",\"maccatalyst\":\"13.1\",\"macos\":\"10.11\",\"tvos\":\"9.0\",\"visionos\":\"1.0\",\"watchos\":\"2.0\"}",
+  "minIos": "9.0",
+  "minMacos": "10.11",
+  "minWatchos": "2.0",
+  "minTvos": "9.0",
+  "minVisionos": "1.0",
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Return Value Discussion",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "Decompresses the contents of a source buffer into a destination buffer.",
+   "contentJson": [
+    {
+     "text": "Decompresses the contents of a source buffer into a destination buffer.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "func compression_decode_buffer(_ dst_buffer: UnsafeMutablePointer<UInt8>, _ dst_size: Int, _ src_buffer: UnsafePointer<UInt8>, _ src_size: Int, _ scratch_buffer: UnsafeMutableRawPointer?, _ algorithm: compression_algorithm) -> Int",
+   "contentJson": [
+    {
+     "languages": [
+      "swift"
+     ],
+     "platforms": [
+      "iOS",
+      "iPadOS",
+      "Mac Catalyst",
+      "macOS",
+      "tvOS",
+      "visionOS",
+      "watchOS"
+     ],
+     "tokens": [
+      {
+       "kind": "keyword",
+       "text": "func"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "identifier",
+       "text": "compression_decode_buffer"
+      },
+      {
+       "kind": "text",
+       "text": "("
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "dst_buffer"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/UnsafeMutablePointer",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:Sp",
+       "text": "UnsafeMutablePointer",
+       "_resolvedKey": "swift/unsafemutablepointer"
+      },
+      {
+       "kind": "text",
+       "text": "<"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/UInt8",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:s5UInt8V",
+       "text": "UInt8",
+       "_resolvedKey": "swift/uint8"
+      },
+      {
+       "kind": "text",
+       "text": ">, "
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "dst_size"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Int",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:Si",
+       "text": "Int",
+       "_resolvedKey": "swift/int"
+      },
+      {
+       "kind": "text",
+       "text": ", "
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "src_buffer"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/UnsafePointer",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:SP",
+       "text": "UnsafePointer",
+       "_resolvedKey": "swift/unsafepointer"
+      },
+      {
+       "kind": "text",
+       "text": "<"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/UInt8",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:s5UInt8V",
+       "text": "UInt8",
+       "_resolvedKey": "swift/uint8"
+      },
+      {
+       "kind": "text",
+       "text": ">, "
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "src_size"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Int",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:Si",
+       "text": "Int",
+       "_resolvedKey": "swift/int"
+      },
+      {
+       "kind": "text",
+       "text": ", "
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "scratch_buffer"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/UnsafeMutableRawPointer",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:Sv",
+       "text": "UnsafeMutableRawPointer",
+       "_resolvedKey": "swift/unsafemutablerawpointer"
+      },
+      {
+       "kind": "text",
+       "text": "?, "
+      },
+      {
+       "kind": "externalParam",
+       "text": "_"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "internalParam",
+       "text": "algorithm"
+      },
+      {
+       "kind": "text",
+       "text": ": "
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_algorithm",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "c:@EA@compression_algorithm",
+       "text": "compression_algorithm",
+       "_resolvedKey": "compression/compression_algorithm"
+      },
+      {
+       "kind": "text",
+       "text": ") -> "
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Int",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:Si",
+       "text": "Int",
+       "_resolvedKey": "swift/int"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "parameters",
+   "heading": "Parameters",
+   "contentText": "dst_buffer: Pointer to the buffer that receives the decompressed data.\ndst_size: Size of the destination buffer in bytes.\nsrc_buffer: Pointer to a buffer containing all of the compressed source data.\nsrc_size: Size of the data in the source buffer in bytes.\nscratch_buffer: If scratch_buffer is not nil, this parameter is a pointer to a buffer that the function uses for scratch purposes. The size of this buffer must be at least the size returned by a previous call to compression_decode_scratch_buffer_size(_:).\nIf scratch_buffer is nil, the function creates and manages its own scratch space, but with a possible performance hit.\nalgorithm: A constant of type compression_algorithm that specifies the compression algorithm.",
+   "contentJson": [
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Pointer to the buffer that receives the decompressed data.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "dst_buffer"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Size of the destination buffer in bytes.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "dst_size"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Pointer to a buffer containing all of the compressed source data.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "src_buffer"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Size of the data in the source buffer in bytes.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "src_size"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "If ",
+         "type": "text"
+        },
+        {
+         "code": "scratch_buffer",
+         "type": "codeVoice"
+        },
+        {
+         "text": " is not ",
+         "type": "text"
+        },
+        {
+         "code": "nil",
+         "type": "codeVoice"
+        },
+        {
+         "text": ", this parameter is a pointer to a buffer that the function uses for scratch purposes. The size of this buffer must be at least the size returned by a previous call to ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.compression/documentation/Compression/compression_decode_scratch_buffer_size(_:)",
+         "isActive": true,
+         "type": "reference"
+        },
+        {
+         "text": ".",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      },
+      {
+       "inlineContent": [
+        {
+         "text": "If ",
+         "type": "text"
+        },
+        {
+         "code": "scratch_buffer",
+         "type": "codeVoice"
+        },
+        {
+         "text": " is ",
+         "type": "text"
+        },
+        {
+         "code": "nil",
+         "type": "codeVoice"
+        },
+        {
+         "text": ", the function creates and manages its own scratch space, but with a possible performance hit.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "scratch_buffer"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "A constant of type ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.compression/documentation/Compression/compression_algorithm",
+         "isActive": true,
+         "type": "reference"
+        },
+        {
+         "text": " that specifies the compression algorithm.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "algorithm"
+    }
+   ],
+   "sortOrder": 2
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Return Value",
+   "contentText": "Return Value\nThe number of bytes written to the destination buffer after decompressing the input.  If there is not enough space in the destination buffer to hold the entire decompressed output, the function writes the first dst_size bytes to the buffer and returns dst_size. Note that this behavior differs from that of compression_encode_buffer(_:_:_:_:_:_:).\n",
+   "contentJson": [
+    {
+     "anchor": "return-value",
+     "level": 2,
+     "text": "Return Value",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "The number of bytes written to the destination buffer after decompressing the input.  If there is not enough space in the destination buffer to hold the entire decompressed output, the function writes the first ",
+       "type": "text"
+      },
+      {
+       "code": "dst_size",
+       "type": "codeVoice"
+      },
+      {
+       "text": " bytes to the buffer and returns ",
+       "type": "text"
+      },
+      {
+       "code": "dst_size",
+       "type": "codeVoice"
+      },
+      {
+       "text": ". Note that this behavior differs from that of ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_encode_buffer(_:_:_:_:_:_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "compression_encode_buffer(_:_:_:_:_:_:)",
+       "_resolvedKey": "compression/compression_encode_buffer(_:_:_:_:_:_:)"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Discussion",
+   "contentText": "Discussion\nThe function writes the decompressed data to dst_buffer.\n",
+   "contentJson": [
+    {
+     "anchor": "Discussion",
+     "level": 2,
+     "text": "Discussion",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "The function writes the decompressed data to ",
+       "type": "text"
+      },
+      {
+       "code": "dst_buffer",
+       "type": "codeVoice"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Single-step compression\nCompressing and decompressing data with buffer compression\ncompression_encode_scratch_buffer_size(_:)\ncompression_encode_buffer(_:_:_:_:_:_:)\ncompression_decode_scratch_buffer_size(_:)\ncompression_algorithm",
+   "contentJson": [
+    {
+     "title": "Single-step compression",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Accelerate/compressing-and-decompressing-data-with-buffer-compression",
+       "key": "accelerate/compressing-and-decompressing-data-with-buffer-compression",
+       "title": "Compressing and decompressing data with buffer compression"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_encode_scratch_buffer_size(_:)",
+       "key": "compression/compression_encode_scratch_buffer_size(_:)",
+       "title": "compression_encode_scratch_buffer_size(_:)"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_encode_buffer(_:_:_:_:_:_:)",
+       "key": "compression/compression_encode_buffer(_:_:_:_:_:_:)",
+       "title": "compression_encode_buffer(_:_:_:_:_:_:)"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_decode_scratch_buffer_size(_:)",
+       "key": "compression/compression_decode_scratch_buffer_size(_:)",
+       "title": "compression_decode_scratch_buffer_size(_:)"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/compression_algorithm",
+       "key": "compression/compression_algorithm",
+       "title": "compression_algorithm"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+   "toKey": "accelerate/compressing-and-decompressing-data-with-buffer-compression",
+   "relationType": "see_also",
+   "section": "Single-step compression",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+   "toKey": "compression/compression_encode_scratch_buffer_size(_:)",
+   "relationType": "see_also",
+   "section": "Single-step compression",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+   "toKey": "compression/compression_encode_buffer(_:_:_:_:_:_:)",
+   "relationType": "see_also",
+   "section": "Single-step compression",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+   "toKey": "compression/compression_decode_scratch_buffer_size(_:)",
+   "relationType": "see_also",
+   "section": "Single-step compression",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+   "toKey": "compression/compression_algorithm",
+   "relationType": "see_also",
+   "section": "Single-step compression",
+   "sortOrder": 4
+  }
+ ]
+}

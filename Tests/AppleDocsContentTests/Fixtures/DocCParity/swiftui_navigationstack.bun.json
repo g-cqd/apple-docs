@@ -1,0 +1,892 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "swiftui/navigationstack",
+  "title": "NavigationStack",
+  "kind": "struct",
+  "role": "symbol",
+  "roleHeading": "Structure",
+  "framework": "swiftui",
+  "url": "https://developer.apple.com/documentation/swiftui/navigationstack",
+  "language": "swift",
+  "abstractText": "A view that displays a root view and enables you to present additional views over the root view.",
+  "declarationText": "nonisolated struct NavigationStack<Data, Root> where Root : View",
+  "platformsJson": "{\"ios\":\"16.0\",\"ipados\":\"16.0\",\"maccatalyst\":\"16.0\",\"macos\":\"13.0\",\"tvos\":\"16.0\",\"visionos\":\"1.0\",\"watchos\":\"9.0\"}",
+  "minIos": "16.0",
+  "minMacos": "13.0",
+  "minWatchos": "9.0",
+  "minTvos": "16.0",
+  "minVisionos": "1.0",
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Overview Manage navigation state Navigate to different view types",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "A view that displays a root view and enables you to present additional views over the root view.",
+   "contentJson": [
+    {
+     "text": "A view that displays a root view and enables you to present additional",
+     "type": "text"
+    },
+    {
+     "text": " ",
+     "type": "text"
+    },
+    {
+     "text": "views over the root view.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "nonisolated struct NavigationStack<Data, Root> where Root : View",
+   "contentJson": [
+    {
+     "languages": [
+      "swift"
+     ],
+     "platforms": [
+      "iOS",
+      "iPadOS",
+      "Mac Catalyst",
+      "macOS",
+      "tvOS",
+      "visionOS",
+      "watchOS"
+     ],
+     "tokens": [
+      {
+       "kind": "attribute",
+       "text": "nonisolated"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "keyword",
+       "text": "struct"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "identifier",
+       "text": "NavigationStack"
+      },
+      {
+       "kind": "text",
+       "text": "<"
+      },
+      {
+       "kind": "genericParameter",
+       "text": "Data"
+      },
+      {
+       "kind": "text",
+       "text": ", "
+      },
+      {
+       "kind": "genericParameter",
+       "text": "Root"
+      },
+      {
+       "kind": "text",
+       "text": "> "
+      },
+      {
+       "kind": "keyword",
+       "text": "where"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "typeIdentifier",
+       "text": "Root"
+      },
+      {
+       "kind": "text",
+       "text": " : "
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View",
+       "kind": "typeIdentifier",
+       "preciseIdentifier": "s:7SwiftUI4ViewP",
+       "text": "View",
+       "_resolvedKey": "swiftui/view"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "mentioned_in",
+   "heading": "Mentioned in",
+   "contentText": "Migrating to new navigation types\nAdding a search interface to your app\nDisplaying data in lists\nUnderstanding the navigation stack",
+   "contentJson": [
+    {
+     "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Migrating-to-New-Navigation-Types",
+     "key": "swiftui/migrating-to-new-navigation-types",
+     "title": "Migrating to new navigation types"
+    },
+    {
+     "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Adding-a-search-interface-to-your-app",
+     "key": "swiftui/adding-a-search-interface-to-your-app",
+     "title": "Adding a search interface to your app"
+    },
+    {
+     "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Displaying-Data-in-Lists",
+     "key": "swiftui/displaying-data-in-lists",
+     "title": "Displaying data in lists"
+    },
+    {
+     "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Understanding-the-navigation-stack",
+     "key": "swiftui/understanding-the-navigation-stack",
+     "title": "Understanding the navigation stack"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Overview",
+   "contentText": "Overview\nUse a navigation stack to present a stack of views over a root view. People can add views to the top of the stack by clicking or tapping a NavigationLink, and remove views using built-in, platform-appropriate controls, like a Back button or a swipe gesture. The stack always displays the most recently added view that hasn’t been removed, and doesn’t allow the root view to be removed.\nTo create navigation links, associate a view with a data type by adding a navigationDestination(for:destination:) modifier inside the stack’s view hierarchy. Then initialize a NavigationLink that presents an instance of the same kind of data. The following stack displays a ParkDetails view for navigation links that present data of type Park:\nNavigationStack {\n    List(parks) { park in\n        NavigationLink(park.name, value: park)\n    }\n    .navigationDestination(for: Park.self) { park in\n        ParkDetails(park: park)\n    }\n}\nIn this example, the List acts as the root view and is always present. Selecting a navigation link from the list adds a ParkDetails view to the stack, so that it covers the list. Navigating back removes the detail view and reveals the list again. The system disables backward navigation controls when the stack is empty and the root view, namely the list, is visible.\nManage navigation state\nBy default, a navigation stack manages state to keep track of the views on the stack. However, your code can share control of the state by initializing the stack with a binding to a collection of data values that you create. The stack adds items to the collection as it adds views to the stack and removes items when it removes views. For example, you can create a State property to manage the navigation for the park detail view:\n@State private var presentedParks: [Park] = []\nInitializing the state as an empty array indicates a stack with no views. Provide a Binding to this state property using the dollar sign ($) prefix when you create a stack using the init(path:root:) initializer:\nNavigationStack(path: $presentedParks) {\n    List(parks) { park in\n        NavigationLink(park.name, value: park)\n    }\n    .navigationDestination(for: Park.self) { park in\n        ParkDetails(park: park)\n    }\n}\nLike before, when someone taps or clicks the navigation link for a park, the stack displays the ParkDetails view using the associated park data. However, now the stack also puts the park data in the presentedParks array. Your code can observe this array to read the current stack state. It can also modify the array to change the views on the stack. For example, you can create a method that configures the stack with a specific set of parks:\nfunc showParks() {\n    presentedParks = [Park(\"Yosemite\"), Park(\"Sequoia\")]\n}\nThe showParks method replaces the stack’s display with a view that shows details for Sequoia, the last item in the new presentedParks array. Navigating back from that view removes Sequoia from the array, which reveals a view that shows details for Yosemite. Use a path to support deep links, state restoration, or other kinds of programmatic navigation.\nNavigate to different view types\nTo create a stack that can present more than one kind of view, you can add multiple navigationDestination(for:destination:) modifiers inside the stack’s view hierarchy, with each modifier presenting a different data type. The stack matches navigation links with navigation destinations based on their respective data types.\nTo create a path for programmatic navigation that contains more than one kind of data, you can use a NavigationPath instance as the path.\n",
+   "contentJson": [
+    {
+     "anchor": "overview",
+     "level": 2,
+     "text": "Overview",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Use a navigation stack to present a stack of views over a root view.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "People can add views to the top of the stack by clicking or tapping a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationLink",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "NavigationLink",
+       "_resolvedKey": "swiftui/navigationlink"
+      },
+      {
+       "text": ", and remove views using built-in, platform-appropriate",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "controls, like a Back button or a swipe gesture. The stack always displays",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the most recently added view that hasn’t been removed, and doesn’t allow",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the root view to be removed.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To create navigation links, associate a view with a data type by adding a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/navigationDestination(for:destination:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "navigationDestination(for:destination:)",
+       "_resolvedKey": "swiftui/view/navigationdestination(for:destination:)"
+      },
+      {
+       "text": " modifier inside",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the stack’s view hierarchy. Then initialize a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationLink",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "NavigationLink",
+       "_resolvedKey": "swiftui/navigationlink"
+      },
+      {
+       "text": " that",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "presents an instance of the same kind of data. The following stack displays",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "a ",
+       "type": "text"
+      },
+      {
+       "code": "ParkDetails",
+       "type": "codeVoice"
+      },
+      {
+       "text": " view for navigation links that present data of type ",
+       "type": "text"
+      },
+      {
+       "code": "Park",
+       "type": "codeVoice"
+      },
+      {
+       "text": ":",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "NavigationStack {",
+      "    List(parks) { park in",
+      "        NavigationLink(park.name, value: park)",
+      "    }",
+      "    .navigationDestination(for: Park.self) { park in",
+      "        ParkDetails(park: park)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In this example, the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/List",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "List",
+       "_resolvedKey": "swiftui/list"
+      },
+      {
+       "text": " acts as the root view and is always",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "present. Selecting a navigation link from the list adds a ",
+       "type": "text"
+      },
+      {
+       "code": "ParkDetails",
+       "type": "codeVoice"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "view to the stack, so that it covers the list. Navigating back removes",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the detail view and reveals the list again. The system disables backward",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "navigation controls when the stack is empty and the root view, namely",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the list, is visible.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Manage-navigation-state",
+     "level": 3,
+     "text": "Manage navigation state",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "By default, a navigation stack manages state to keep track of the views on",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the stack. However, your code can share control of the state by initializing",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the stack with a binding to a collection of data values that you create.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "The stack adds items to the collection as it adds views to the stack and",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "removes items when it removes views. For example, you can create a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/State",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "State",
+       "_resolvedKey": "swiftui/state"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "property to manage the navigation for the park detail view:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@State private var presentedParks: [Park] = []"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Initializing the state as an empty array indicates a stack with no views.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "Provide a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Binding",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Binding",
+       "_resolvedKey": "swiftui/binding"
+      },
+      {
+       "text": " to this state property using the dollar sign (",
+       "type": "text"
+      },
+      {
+       "code": "$",
+       "type": "codeVoice"
+      },
+      {
+       "text": ")",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "prefix when you create a stack using the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationStack/init(path:root:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "init(path:root:)",
+       "_resolvedKey": "swiftui/navigationstack/init(path:root:)"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "initializer:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "NavigationStack(path: $presentedParks) {",
+      "    List(parks) { park in",
+      "        NavigationLink(park.name, value: park)",
+      "    }",
+      "    .navigationDestination(for: Park.self) { park in",
+      "        ParkDetails(park: park)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Like before, when someone taps or clicks the navigation link for a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "park, the stack displays the ",
+       "type": "text"
+      },
+      {
+       "code": "ParkDetails",
+       "type": "codeVoice"
+      },
+      {
+       "text": " view using the associated park",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "data. However, now the stack also puts the park data in the ",
+       "type": "text"
+      },
+      {
+       "code": "presentedParks",
+       "type": "codeVoice"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "array. Your code can observe this array to read the current stack state. It",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "can also modify the array to change the views on the stack. For example, you",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "can create a method that configures the stack with a specific set of parks:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "func showParks() {",
+      "    presentedParks = [Park(\"Yosemite\"), Park(\"Sequoia\")]",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "The ",
+       "type": "text"
+      },
+      {
+       "code": "showParks",
+       "type": "codeVoice"
+      },
+      {
+       "text": " method replaces the stack’s display with a view that shows",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "details for Sequoia, the last item in the new ",
+       "type": "text"
+      },
+      {
+       "code": "presentedParks",
+       "type": "codeVoice"
+      },
+      {
+       "text": " array.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "Navigating back from that view removes Sequoia from the array, which",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "reveals a view that shows details for Yosemite. Use a path to support",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "deep links, state restoration, or other kinds of programmatic navigation.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Navigate-to-different-view-types",
+     "level": 3,
+     "text": "Navigate to different view types",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To create a stack that can present more than one kind of view, you can add",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "multiple ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/navigationDestination(for:destination:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "navigationDestination(for:destination:)",
+       "_resolvedKey": "swiftui/view/navigationdestination(for:destination:)"
+      },
+      {
+       "text": " modifiers",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "inside the stack’s view hierarchy, with each modifier presenting a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "different data type. The stack matches navigation links with navigation",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "destinations based on their respective data types.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To create a path for programmatic navigation that contains more than one",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "kind of data, you can use a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationPath",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "NavigationPath",
+       "_resolvedKey": "swiftui/navigationpath"
+      },
+      {
+       "text": " instance as the path.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "topics",
+   "heading": "Topics",
+   "contentText": "Creating a navigation stack\ninit(root:)\nCreating a navigation stack with a path\ninit(path:root:)",
+   "contentJson": [
+    {
+     "title": "Creating a navigation stack",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationStack/init(root:)",
+       "key": "swiftui/navigationstack/init(root:)",
+       "title": "init(root:)"
+      }
+     ]
+    },
+    {
+     "title": "Creating a navigation stack with a path",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationStack/init(path:root:)",
+       "key": "swiftui/navigationstack/init(path:root:)",
+       "title": "init(path:root:)"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  },
+  {
+   "sectionKind": "relationships",
+   "heading": "Relationships",
+   "contentText": "Conforms To\nView",
+   "contentJson": [
+    {
+     "title": "Conforms To",
+     "type": "conformsTo",
+     "items": [
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View",
+       "key": "swiftui/view",
+       "title": "View"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 7
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Stacking views in one column\nNavigationPath\nnavigationDestination(for:destination:)\nnavigationDestination(isPresented:destination:)\nnavigationDestination(item:destination:)",
+   "contentJson": [
+    {
+     "title": "Stacking views in one column",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/NavigationPath",
+       "key": "swiftui/navigationpath",
+       "title": "NavigationPath"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/navigationDestination(for:destination:)",
+       "key": "swiftui/view/navigationdestination(for:destination:)",
+       "title": "navigationDestination(for:destination:)"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/navigationDestination(isPresented:destination:)",
+       "key": "swiftui/view/navigationdestination(ispresented:destination:)",
+       "title": "navigationDestination(isPresented:destination:)"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/navigationDestination(item:destination:)",
+       "key": "swiftui/view/navigationdestination(item:destination:)",
+       "title": "navigationDestination(item:destination:)"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 8
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/navigationstack/init(root:)",
+   "relationType": "child",
+   "section": "Creating a navigation stack",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/navigationstack/init(path:root:)",
+   "relationType": "child",
+   "section": "Creating a navigation stack with a path",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/view",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/navigationpath",
+   "relationType": "see_also",
+   "section": "Stacking views in one column",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/view/navigationdestination(for:destination:)",
+   "relationType": "see_also",
+   "section": "Stacking views in one column",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/view/navigationdestination(ispresented:destination:)",
+   "relationType": "see_also",
+   "section": "Stacking views in one column",
+   "sortOrder": 5
+  },
+  {
+   "fromKey": "swiftui/navigationstack",
+   "toKey": "swiftui/view/navigationdestination(item:destination:)",
+   "relationType": "see_also",
+   "section": "Stacking views in one column",
+   "sortOrder": 6
+  }
+ ]
+}

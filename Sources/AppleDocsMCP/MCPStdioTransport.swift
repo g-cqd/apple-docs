@@ -20,8 +20,10 @@ public enum MCPStdioTransport: Sendable {
         let writer = output ?? .standardOutput
         var framing = LineFraming(maximumLineLength: maxLineBytes)
         while true {
-            let chunk = try reader.read(upToCount: 65_536)
-            guard let chunk, !chunk.isEmpty else { break }
+            // `availableData` returns as soon as any bytes arrive (empty at EOF); `read(upToCount:)` would
+            // wait for a full buffer and starve interactive clients that keep stdin open between requests.
+            let chunk = reader.availableData
+            guard !chunk.isEmpty else { break }
             let lines = framing.append(chunk)
             for line in lines {
                 switch line {

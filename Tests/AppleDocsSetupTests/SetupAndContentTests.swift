@@ -134,12 +134,12 @@ struct SetupAndContentTests {
         #expect(docc.document.title == "NavigationStack")
         #expect(docc.document.kind == "struct")
         #expect(docc.document.availability.ios == "16.0")
-        #expect(docc.document.isBeta)
+        #expect(!docc.document.isBeta)  // Bun reads `metadata.beta`, not per-platform flags
         #expect(docc.document.declarationText == "struct NavigationStack")
-        #expect(docc.document.abstractText == "A view that displays a root view with `NavigationPath`")
+        #expect(docc.document.abstractText == "A view that displays a root view with NavigationPath")
         #expect(docc.sections.map(\.sectionKind) == ["abstract", "declaration", "discussion"])
         #expect(docc.sections[2].heading == "Overview")
-        #expect(docc.sections[2].contentText == "Push destinations cleanly.")
+        #expect(docc.sections[2].contentText == "Overview\nPush destinations cleanly.\n")
     }
 
     @Test func `converts HTML pages via AemiHTML while stripping chrome and hidden prompt injections`() throws {

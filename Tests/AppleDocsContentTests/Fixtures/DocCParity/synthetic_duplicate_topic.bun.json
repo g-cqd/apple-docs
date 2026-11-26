@@ -1,0 +1,75 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "pdfkit/pdfselection",
+  "title": "PDFSelection",
+  "kind": null,
+  "role": null,
+  "roleHeading": null,
+  "framework": "pdfkit",
+  "url": "https://developer.apple.com/documentation/pdfkit/pdfselection",
+  "language": null,
+  "abstractText": null,
+  "declarationText": null,
+  "platformsJson": null,
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": null,
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "topics",
+   "heading": "Topics",
+   "contentText": "Getting Information\ncolor\nManaging Drawing\ncolor",
+   "contentJson": [
+    {
+     "title": "Getting Information",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://p/documentation/PDFKit/PDFSelection/color",
+       "key": "pdfkit/pdfselection/color",
+       "title": "color"
+      }
+     ]
+    },
+    {
+     "title": "Managing Drawing",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://p/documentation/PDFKit/PDFSelection/color",
+       "key": "pdfkit/pdfselection/color",
+       "title": "color"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 4
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "pdfkit/pdfselection",
+   "toKey": "pdfkit/pdfselection/color",
+   "relationType": "child",
+   "section": "Getting Information",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "pdfkit/pdfselection",
+   "toKey": "pdfkit/pdfselection/color",
+   "relationType": "child",
+   "section": "Managing Drawing",
+   "sortOrder": 1
+  }
+ ]
+}

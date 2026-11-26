@@ -1,0 +1,62 @@
+[
+  {
+    "name": "appstoreserverapi_get-transaction-info",
+    "key": "appstoreserverapi/get-transaction-info",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "appstoreserverapi_jwstransactiondecodedpayload",
+    "key": "appstoreserverapi/jwstransactiondecodedpayload",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "compression_algorithm",
+    "key": "compression/algorithm",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "compression_compression_decode_buffer",
+    "key": "compression/compression_decode_buffer(_:_:_:_:_:_:)",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "coreml_mlmodel_prediction_from",
+    "key": "coreml/mlmodel/prediction(from:)",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "design_human-interface-guidelines_toggles",
+    "key": "design/human-interface-guidelines/toggles",
+    "sourceType": "hig"
+  },
+  {
+    "name": "pdfkit_pdfview",
+    "key": "pdfkit/pdfview",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "swiftui_managing-model-data-in-your-app",
+    "key": "swiftui/managing-model-data-in-your-app",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "swiftui_navigationstack",
+    "key": "swiftui/navigationstack",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "synthetic_algorithm",
+    "key": "compression/algorithm",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "synthetic_empty_link_group",
+    "key": "coreml/guide",
+    "sourceType": "apple-docc"
+  },
+  {
+    "name": "synthetic_duplicate_topic",
+    "key": "pdfkit/pdfselection",
+    "sourceType": "apple-docc"
+  }
+]

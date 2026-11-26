@@ -1,0 +1,223 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "compression/algorithm",
+  "title": "Algorithm",
+  "kind": "enum",
+  "role": null,
+  "roleHeading": "Enumeration",
+  "framework": "compression",
+  "url": "https://developer.apple.com/documentation/compression/algorithm",
+  "language": null,
+  "abstractText": "Algorithms used by compression_encode_buffer(_:_:_:_:_:_:)",
+  "declarationText": "enum Algorithm",
+  "platformsJson": null,
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Choose an algorithm",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "Algorithms used by compression_encode_buffer(_:_:_:_:_:_:)",
+   "contentJson": [
+    {
+     "type": "text",
+     "text": "Algorithms used by "
+    },
+    {
+     "type": "reference",
+     "identifier": "doc://c/documentation/Compression/compression_encode_buffer"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "enum Algorithm",
+   "contentJson": [
+    {
+     "tokens": [
+      {
+       "text": "enum Algorithm"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "possible_values",
+   "heading": "Possible Values",
+   "contentText": "lzfse: Apple's codec.",
+   "contentJson": [
+    {
+     "name": "lzfse",
+     "content": [
+      {
+       "type": "paragraph",
+       "inlineContent": [
+        {
+         "type": "text",
+         "text": "Apple's codec."
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "mentioned_in",
+   "heading": "Mentioned in",
+   "contentText": "Compressing files",
+   "contentJson": [
+    {
+     "identifier": "doc://c/documentation/Compression/compressing-files",
+     "key": "compression/compressing-files",
+     "title": "Compressing files"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Choose an algorithm",
+   "contentText": "Choose an algorithm\nSpeed\nRatio\n",
+   "contentJson": [
+    {
+     "type": "heading",
+     "text": "Choose an algorithm"
+    },
+    {
+     "type": "unorderedList",
+     "items": [
+      {
+       "content": [
+        {
+         "type": "paragraph",
+         "inlineContent": [
+          {
+           "type": "text",
+           "text": "Speed"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "content": [
+        {
+         "type": "paragraph",
+         "inlineContent": [
+          {
+           "type": "strong",
+           "inlineContent": [
+            {
+             "type": "text",
+             "text": "Ratio"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  },
+  {
+   "sectionKind": "topics",
+   "heading": "Topics",
+   "contentText": "Codecs\nlzfse",
+   "contentJson": [
+    {
+     "title": "Codecs",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://c/documentation/Compression/Algorithm/lzfse",
+       "key": "compression/algorithm/lzfse",
+       "title": "lzfse"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 7
+  },
+  {
+   "sectionKind": "relationships",
+   "heading": "Relationships",
+   "contentText": "Conforms To\nSendable",
+   "contentJson": [
+    {
+     "title": "Conforms To",
+     "type": "conformsTo",
+     "items": [
+      {
+       "identifier": "doc://c/documentation/Swift/Sendable",
+       "key": "swift/sendable",
+       "title": "Sendable"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 8
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Related\ncompression_encode_buffer(_:_:_:_:_:_:)",
+   "contentJson": [
+    {
+     "title": "Related",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://c/documentation/Compression/compression_encode_buffer",
+       "key": "compression/compression_encode_buffer(_:_:_:_:_:_:)",
+       "title": "compression_encode_buffer(_:_:_:_:_:_:)"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 9
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/lzfse",
+   "relationType": "child",
+   "section": "Codecs",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "swift/sendable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/compression_encode_buffer(_:_:_:_:_:_:)",
+   "relationType": "see_also",
+   "section": "Related",
+   "sortOrder": 2
+  }
+ ]
+}

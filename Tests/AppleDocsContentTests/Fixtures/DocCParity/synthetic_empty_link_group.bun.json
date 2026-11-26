@@ -1,0 +1,43 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "coreml/guide",
+  "title": "Guide",
+  "kind": null,
+  "role": null,
+  "roleHeading": null,
+  "framework": "coreml",
+  "url": "https://developer.apple.com/documentation/coreml/guide",
+  "language": null,
+  "abstractText": null,
+  "declarationText": null,
+  "platformsJson": null,
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": null,
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Optimization",
+   "contentJson": [
+    {
+     "title": "Optimization",
+     "type": null,
+     "items": []
+    }
+   ],
+   "sortOrder": 4
+  }
+ ],
+ "relationships": []
+}

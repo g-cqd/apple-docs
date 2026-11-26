@@ -1,0 +1,946 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "pdfkit/pdfview",
+  "title": "PDFView",
+  "kind": "class",
+  "role": "symbol",
+  "roleHeading": "Class",
+  "framework": "pdfkit",
+  "url": "https://developer.apple.com/documentation/pdfkit/pdfview",
+  "language": "swift",
+  "abstractText": "An object that encapsulates the functionality of PDF Kit into a single widget that you can add to your application using Interface Builder.",
+  "declarationText": "class PDFView",
+  "platformsJson": "{\"ios\":\"11.0\",\"ipados\":\"11.0\",\"maccatalyst\":\"13.1\",\"macos\":\"10.4\",\"tvos\":\"11.0\",\"visionos\":\"1.0\"}",
+  "minIos": "11.0",
+  "minMacos": "10.4",
+  "minWatchos": null,
+  "minTvos": "11.0",
+  "minVisionos": "1.0",
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Overview",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "An object that encapsulates the functionality of PDF Kit into a single widget that you can add to your application using Interface Builder.",
+   "contentJson": [
+    {
+     "text": "An object that encapsulates the functionality of PDF Kit into a single widget that you can add to your application using Interface Builder.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "class PDFView",
+   "contentJson": [
+    {
+     "languages": [
+      "swift"
+     ],
+     "platforms": [
+      "iOS",
+      "iPadOS",
+      "Mac Catalyst",
+      "macOS",
+      "tvOS",
+      "visionOS"
+     ],
+     "tokens": [
+      {
+       "kind": "keyword",
+       "text": "class"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "identifier",
+       "text": "PDFView"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "mentioned_in",
+   "heading": "Mentioned in",
+   "contentText": "Adding Custom Graphics to a PDF",
+   "contentJson": [
+    {
+     "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/adding-custom-graphics-to-a-pdf",
+     "key": "pdfkit/adding-custom-graphics-to-a-pdf",
+     "title": "Adding Custom Graphics to a PDF"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Overview",
+   "contentText": "Overview\nPDFView may be the only class you need to deal with for adding PDF functionality to your application. It lets you display PDF data and allows users to select content, navigate through a document, set zoom level, and copy textual content to the Pasteboard. PDFView also keeps track of page history.\nYou can subclass PDFView to create a custom PDF viewer.\nYou can also create a custom PDF viewer by using the PDF Kit utility classes directly and not using PDFView at all.\n",
+   "contentJson": [
+    {
+     "anchor": "overview",
+     "level": 2,
+     "text": "Overview",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "code": "PDFView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " may be the only class you need to deal with for adding PDF functionality to your application. It lets you display PDF data and allows users to select content, navigate through a document, set zoom level, and copy textual content to the Pasteboard. ",
+       "type": "text"
+      },
+      {
+       "code": "PDFView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " also keeps track of page history.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can subclass ",
+       "type": "text"
+      },
+      {
+       "code": "PDFView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " to create a custom PDF viewer.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can also create a custom PDF viewer by using the PDF Kit utility classes directly and not using ",
+       "type": "text"
+      },
+      {
+       "code": "PDFView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " at all.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "topics",
+   "heading": "Topics",
+   "contentText": "Associating a Document with a View\ndocument\ntakePasswordFrom(_:)\nConfiguring Document View\nConfigurations\nInteracting in a View\nDocument Interactions\nNavigating Within a Document\ncurrentPage\ncurrentDestination\nvisiblePages\nNavigation\nSetting the Delegate\ndelegate\nPDFViewDelegate\nInstance Properties\nfindInteraction\nisFindInteractionEnabled\nisInMarkupMode\npageOverlayViewProvider\npageShadowsEnabled",
+   "contentJson": [
+    {
+     "title": "Associating a Document with a View",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/document",
+       "key": "pdfkit/pdfview/document",
+       "title": "document"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/takePasswordFrom(_:)",
+       "key": "pdfkit/pdfview/takepasswordfrom(_:)",
+       "title": "takePasswordFrom(_:)"
+      }
+     ]
+    },
+    {
+     "title": "Configuring Document View",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/configurations",
+       "key": "pdfkit/configurations",
+       "title": "Configurations"
+      }
+     ]
+    },
+    {
+     "title": "Interacting in a View",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/document-interactions",
+       "key": "pdfkit/document-interactions",
+       "title": "Document Interactions"
+      }
+     ]
+    },
+    {
+     "title": "Navigating Within a Document",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/currentPage",
+       "key": "pdfkit/pdfview/currentpage",
+       "title": "currentPage"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/currentDestination",
+       "key": "pdfkit/pdfview/currentdestination",
+       "title": "currentDestination"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/visiblePages",
+       "key": "pdfkit/pdfview/visiblepages",
+       "title": "visiblePages"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/navigation",
+       "key": "pdfkit/navigation",
+       "title": "Navigation"
+      }
+     ]
+    },
+    {
+     "title": "Setting the Delegate",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/delegate",
+       "key": "pdfkit/pdfview/delegate",
+       "title": "delegate"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFViewDelegate",
+       "key": "pdfkit/pdfviewdelegate",
+       "title": "PDFViewDelegate"
+      }
+     ]
+    },
+    {
+     "title": "Instance Properties",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/findInteraction",
+       "key": "pdfkit/pdfview/findinteraction",
+       "title": "findInteraction"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/isFindInteractionEnabled",
+       "key": "pdfkit/pdfview/isfindinteractionenabled",
+       "title": "isFindInteractionEnabled"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/isInMarkupMode",
+       "key": "pdfkit/pdfview/isinmarkupmode",
+       "title": "isInMarkupMode"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/pageOverlayViewProvider",
+       "key": "pdfkit/pdfview/pageoverlayviewprovider",
+       "title": "pageOverlayViewProvider"
+      },
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFView/pageShadowsEnabled",
+       "key": "pdfkit/pdfview/pageshadowsenabled",
+       "title": "pageShadowsEnabled"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  },
+  {
+   "sectionKind": "relationships",
+   "heading": "Relationships",
+   "contentText": "Inherits From\nNSView\nUIView\nConforms To\nCALayerDelegate\nCLBodyIdentifiable\nCMBodyIdentifiable\nCVarArg\nCustomDebugStringConvertible\nCustomStringConvertible\nEquatable\nHashable\nNSAccessibilityElementProtocol\nNSAccessibilityProtocol\nNSAnimatablePropertyContainer\nNSAnimationDelegate\nNSAppearanceCustomization\nNSCoding\nNSDraggingDestination\nNSMenuDelegate\nNSObjectProtocol\nNSStandardKeyBindingResponding\nNSTouchBarProvider\nNSUserActivityRestoring\nNSUserInterfaceItemIdentification\nSendable\nSendableMetatype\nUIAccessibilityIdentification\nUIActivityItemsConfigurationProviding\nUIAppearance\nUIAppearanceContainer\nUICoordinateSpace\nUIDynamicItem\nUIFindInteractionDelegate\nUIFocusEnvironment\nUIFocusItem\nUIFocusItemContainer\nUIGestureRecognizerDelegate\nUILargeContentViewerItem\nUIPasteConfigurationSupporting\nUIPopoverPresentationControllerSourceItem\nUIResponderStandardEditActions\nUITraitChangeObservable\nUITraitEnvironment\nUIUserActivityRestoring",
+   "contentJson": [
+    {
+     "title": "Inherits From",
+     "type": "inheritsFrom",
+     "items": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSView",
+       "key": "appkit/nsview",
+       "title": "NSView"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIView",
+       "key": "uikit/uiview",
+       "title": "UIView"
+      }
+     ]
+    },
+    {
+     "title": "Conforms To",
+     "type": "conformsTo",
+     "items": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/QuartzCore/CALayerDelegate",
+       "key": "quartzcore/calayerdelegate",
+       "title": "CALayerDelegate"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/CoreLocation/CLBodyIdentifiable",
+       "key": "corelocation/clbodyidentifiable",
+       "title": "CLBodyIdentifiable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/CoreMotion/CMBodyIdentifiable",
+       "key": "coremotion/cmbodyidentifiable",
+       "title": "CMBodyIdentifiable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/CVarArg",
+       "key": "swift/cvararg",
+       "title": "CVarArg"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/CustomDebugStringConvertible",
+       "key": "swift/customdebugstringconvertible",
+       "title": "CustomDebugStringConvertible"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/CustomStringConvertible",
+       "key": "swift/customstringconvertible",
+       "title": "CustomStringConvertible"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Equatable",
+       "key": "swift/equatable",
+       "title": "Equatable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Hashable",
+       "key": "swift/hashable",
+       "title": "Hashable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSAccessibilityElementProtocol",
+       "key": "appkit/nsaccessibilityelementprotocol",
+       "title": "NSAccessibilityElementProtocol"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSAccessibilityProtocol",
+       "key": "appkit/nsaccessibilityprotocol",
+       "title": "NSAccessibilityProtocol"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSAnimatablePropertyContainer",
+       "key": "appkit/nsanimatablepropertycontainer",
+       "title": "NSAnimatablePropertyContainer"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSAnimationDelegate",
+       "key": "appkit/nsanimationdelegate",
+       "title": "NSAnimationDelegate"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSAppearanceCustomization",
+       "key": "appkit/nsappearancecustomization",
+       "title": "NSAppearanceCustomization"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Foundation/NSCoding",
+       "key": "foundation/nscoding",
+       "title": "NSCoding"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSDraggingDestination",
+       "key": "appkit/nsdraggingdestination",
+       "title": "NSDraggingDestination"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSMenuDelegate",
+       "key": "appkit/nsmenudelegate",
+       "title": "NSMenuDelegate"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/ObjectiveC/NSObjectProtocol",
+       "key": "objectivec/nsobjectprotocol",
+       "title": "NSObjectProtocol"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSStandardKeyBindingResponding",
+       "key": "appkit/nsstandardkeybindingresponding",
+       "title": "NSStandardKeyBindingResponding"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSTouchBarProvider",
+       "key": "appkit/nstouchbarprovider",
+       "title": "NSTouchBarProvider"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSUserActivityRestoring",
+       "key": "appkit/nsuseractivityrestoring",
+       "title": "NSUserActivityRestoring"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSUserInterfaceItemIdentification",
+       "key": "appkit/nsuserinterfaceitemidentification",
+       "title": "NSUserInterfaceItemIdentification"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Sendable",
+       "key": "swift/sendable",
+       "title": "Sendable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/SendableMetatype",
+       "key": "swift/sendablemetatype",
+       "title": "SendableMetatype"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIAccessibilityIdentification",
+       "key": "uikit/uiaccessibilityidentification",
+       "title": "UIAccessibilityIdentification"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIActivityItemsConfigurationProviding",
+       "key": "uikit/uiactivityitemsconfigurationproviding",
+       "title": "UIActivityItemsConfigurationProviding"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIAppearance",
+       "key": "uikit/uiappearance",
+       "title": "UIAppearance"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIAppearanceContainer",
+       "key": "uikit/uiappearancecontainer",
+       "title": "UIAppearanceContainer"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UICoordinateSpace",
+       "key": "uikit/uicoordinatespace",
+       "title": "UICoordinateSpace"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIDynamicItem",
+       "key": "uikit/uidynamicitem",
+       "title": "UIDynamicItem"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIFindInteractionDelegate",
+       "key": "uikit/uifindinteractiondelegate",
+       "title": "UIFindInteractionDelegate"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIFocusEnvironment",
+       "key": "uikit/uifocusenvironment",
+       "title": "UIFocusEnvironment"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIFocusItem",
+       "key": "uikit/uifocusitem",
+       "title": "UIFocusItem"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIFocusItemContainer",
+       "key": "uikit/uifocusitemcontainer",
+       "title": "UIFocusItemContainer"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIGestureRecognizerDelegate",
+       "key": "uikit/uigesturerecognizerdelegate",
+       "title": "UIGestureRecognizerDelegate"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UILargeContentViewerItem",
+       "key": "uikit/uilargecontentvieweritem",
+       "title": "UILargeContentViewerItem"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIPasteConfigurationSupporting",
+       "key": "uikit/uipasteconfigurationsupporting",
+       "title": "UIPasteConfigurationSupporting"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIPopoverPresentationControllerSourceItem",
+       "key": "uikit/uipopoverpresentationcontrollersourceitem",
+       "title": "UIPopoverPresentationControllerSourceItem"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIResponderStandardEditActions",
+       "key": "uikit/uiresponderstandardeditactions",
+       "title": "UIResponderStandardEditActions"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UITraitChangeObservable-67e94",
+       "key": "uikit/uitraitchangeobservable-67e94",
+       "title": "UITraitChangeObservable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UITraitEnvironment",
+       "key": "uikit/uitraitenvironment",
+       "title": "UITraitEnvironment"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIUserActivityRestoring",
+       "key": "uikit/uiuseractivityrestoring",
+       "title": "UIUserActivityRestoring"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 7
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Views\nPDFThumbnailView",
+   "contentJson": [
+    {
+     "title": "Views",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.pdfkit/documentation/PDFKit/PDFThumbnailView",
+       "key": "pdfkit/pdfthumbnailview",
+       "title": "PDFThumbnailView"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 8
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/document",
+   "relationType": "child",
+   "section": "Associating a Document with a View",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/takepasswordfrom(_:)",
+   "relationType": "child",
+   "section": "Associating a Document with a View",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/configurations",
+   "relationType": "child",
+   "section": "Configuring Document View",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/document-interactions",
+   "relationType": "child",
+   "section": "Interacting in a View",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/currentpage",
+   "relationType": "child",
+   "section": "Navigating Within a Document",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/currentdestination",
+   "relationType": "child",
+   "section": "Navigating Within a Document",
+   "sortOrder": 5
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/visiblepages",
+   "relationType": "child",
+   "section": "Navigating Within a Document",
+   "sortOrder": 6
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/navigation",
+   "relationType": "child",
+   "section": "Navigating Within a Document",
+   "sortOrder": 7
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/delegate",
+   "relationType": "child",
+   "section": "Setting the Delegate",
+   "sortOrder": 8
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfviewdelegate",
+   "relationType": "child",
+   "section": "Setting the Delegate",
+   "sortOrder": 9
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/findinteraction",
+   "relationType": "child",
+   "section": "Instance Properties",
+   "sortOrder": 10
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/isfindinteractionenabled",
+   "relationType": "child",
+   "section": "Instance Properties",
+   "sortOrder": 11
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/isinmarkupmode",
+   "relationType": "child",
+   "section": "Instance Properties",
+   "sortOrder": 12
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/pageoverlayviewprovider",
+   "relationType": "child",
+   "section": "Instance Properties",
+   "sortOrder": 13
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfview/pageshadowsenabled",
+   "relationType": "child",
+   "section": "Instance Properties",
+   "sortOrder": 14
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsview",
+   "relationType": "inherits_from",
+   "section": "Inherits From",
+   "sortOrder": 15
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiview",
+   "relationType": "inherits_from",
+   "section": "Inherits From",
+   "sortOrder": 16
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "quartzcore/calayerdelegate",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 17
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "corelocation/clbodyidentifiable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 18
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "coremotion/cmbodyidentifiable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 19
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/cvararg",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 20
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/customdebugstringconvertible",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 21
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/customstringconvertible",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 22
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/equatable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 23
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/hashable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 24
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsaccessibilityelementprotocol",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 25
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsaccessibilityprotocol",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 26
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsanimatablepropertycontainer",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 27
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsanimationdelegate",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 28
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsappearancecustomization",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 29
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "foundation/nscoding",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 30
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsdraggingdestination",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 31
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsmenudelegate",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 32
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "objectivec/nsobjectprotocol",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 33
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsstandardkeybindingresponding",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 34
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nstouchbarprovider",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 35
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsuseractivityrestoring",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 36
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "appkit/nsuserinterfaceitemidentification",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 37
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/sendable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 38
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "swift/sendablemetatype",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 39
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiaccessibilityidentification",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 40
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiactivityitemsconfigurationproviding",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 41
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiappearance",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 42
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiappearancecontainer",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 43
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uicoordinatespace",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 44
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uidynamicitem",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 45
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uifindinteractiondelegate",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 46
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uifocusenvironment",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 47
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uifocusitem",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 48
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uifocusitemcontainer",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 49
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uigesturerecognizerdelegate",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 50
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uilargecontentvieweritem",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 51
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uipasteconfigurationsupporting",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 52
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uipopoverpresentationcontrollersourceitem",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 53
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiresponderstandardeditactions",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 54
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uitraitchangeobservable-67e94",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 55
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uitraitenvironment",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 56
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "uikit/uiuseractivityrestoring",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 57
+  },
+  {
+   "fromKey": "pdfkit/pdfview",
+   "toKey": "pdfkit/pdfthumbnailview",
+   "relationType": "see_also",
+   "section": "Views",
+   "sortOrder": 58
+  }
+ ]
+}

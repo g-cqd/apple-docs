@@ -1,0 +1,147 @@
+{
+ "identifier": {
+  "interfaceLanguage": "swift"
+ },
+ "metadata": {
+  "title": "Algorithm",
+  "symbolKind": "enum",
+  "roleHeading": "Enumeration"
+ },
+ "abstract": [
+  {
+   "type": "text",
+   "text": "Algorithms used by "
+  },
+  {
+   "type": "reference",
+   "identifier": "doc://c/documentation/Compression/compression_encode_buffer"
+  }
+ ],
+ "primaryContentSections": [
+  {
+   "kind": "declarations",
+   "declarations": [
+    {
+     "tokens": [
+      {
+       "text": "enum Algorithm"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "possibleValues",
+   "values": [
+    {
+     "name": "lzfse",
+     "content": [
+      {
+       "type": "paragraph",
+       "inlineContent": [
+        {
+         "type": "text",
+         "text": "Apple's codec."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "mentions",
+   "mentions": [
+    "doc://c/documentation/Compression/compressing-files"
+   ]
+  },
+  {
+   "kind": "content",
+   "content": [
+    {
+     "type": "heading",
+     "text": "Choose an algorithm"
+    },
+    {
+     "type": "unorderedList",
+     "items": [
+      {
+       "content": [
+        {
+         "type": "paragraph",
+         "inlineContent": [
+          {
+           "type": "text",
+           "text": "Speed"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "content": [
+        {
+         "type": "paragraph",
+         "inlineContent": [
+          {
+           "type": "strong",
+           "inlineContent": [
+            {
+             "type": "text",
+             "text": "Ratio"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "topicSections": [
+  {
+   "title": "Codecs",
+   "identifiers": [
+    "doc://c/documentation/Compression/Algorithm/lzfse"
+   ]
+  }
+ ],
+ "relationshipsSections": [
+  {
+   "title": "Conforms To",
+   "type": "conformsTo",
+   "identifiers": [
+    "doc://c/documentation/Swift/Sendable"
+   ]
+  }
+ ],
+ "seeAlsoSections": [
+  {
+   "title": "Related",
+   "identifiers": [
+    "doc://c/documentation/Compression/compression_encode_buffer"
+   ]
+  }
+ ],
+ "references": {
+  "doc://c/documentation/Compression/compression_encode_buffer": {
+   "title": "compression_encode_buffer(_:_:_:_:_:_:)",
+   "url": "/documentation/compression/compression_encode_buffer(_:_:_:_:_:_:)"
+  },
+  "doc://c/documentation/Compression/compressing-files": {
+   "title": "Compressing files",
+   "url": "/documentation/compression/compressing-files"
+  },
+  "doc://c/documentation/Compression/Algorithm/lzfse": {
+   "title": "lzfse",
+   "url": "/documentation/compression/algorithm/lzfse"
+  },
+  "doc://c/documentation/Swift/Sendable": {
+   "title": "Sendable",
+   "url": "/documentation/swift/sendable"
+  }
+ }
+}

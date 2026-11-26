@@ -1,0 +1,1062 @@
+{
+ "document": {
+  "sourceType": "hig",
+  "key": "design/human-interface-guidelines/toggles",
+  "title": "Toggles",
+  "kind": "article",
+  "role": "article",
+  "roleHeading": null,
+  "framework": "design",
+  "url": "https://developer.apple.com/design/human-interface-guidelines/toggles",
+  "language": null,
+  "abstractText": "A toggle lets people choose between a pair of opposing states, like on and off, using a different appearance to indicate each state.",
+  "declarationText": null,
+  "platformsJson": null,
+  "minIos": null,
+  "minMacos": null,
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 2,
+  "headings": "Best practices Platform considerations iOS, iPadOS macOS Switches Checkboxes Radio buttons Resources Related Developer documentation Change log",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "A toggle lets people choose between a pair of opposing states, like on and off, using a different appearance to indicate each state.",
+   "contentJson": [
+    {
+     "text": "A toggle lets people choose between a pair of opposing states, like on and off, using a different appearance to indicate each state.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Best practices",
+   "contentText": "\nA toggle can have various styles, such as switch and checkbox, and different platforms can use these styles in different ways. For guidance, see Platform considerations.\nIn addition to toggles, all platforms also support buttons that behave like toggles by using a different appearance for each state. For developer guidance, see ToggleStyle.\nBest practices\nUse a toggle to help people choose between two opposing values that affect the state of content or a view. A toggle always lets people manage the state of something, so if you need to support other types of actions — such as choosing from a list of items — use a different component, like a Pop-up buttons.\nClearly identify the setting, view, or content the toggle affects. In general, the surrounding context provides enough information for people to understand what they’re turning on or off. In some cases, often in macOS apps, you can also supply a label to describe the state the toggle controls. If you use a button that behaves like a toggle, you generally use an interface icon that communicates its purpose, and you update its appearance — typically by changing the background — based on the current state.\nMake sure the visual differences in a toggle’s state are obvious. For example, you might add or remove a color fill, show or hide the background shape, or change the inner details you display — like a checkmark or dot — to show that a toggle is on or off. Avoid relying solely on different colors to communicate state, because not everyone can perceive the differences.\nPlatform considerations\nNo additional considerations for tvOS, visionOS, or watchOS.\niOS, iPadOS\nUse the switch toggle style only in a list row. You don’t need to supply a label in this situation because the content in the row provides the context for the state the switch controls.\nChange the default color of a switch only if necessary. The default green color tends to work well in most cases, but you might want to use your app’s accent color instead. Be sure to use a color that provides enough contrast with the uncolored appearance to be perceptible.\nOutside of a list, use a button that behaves like a toggle, not a switch. For example, the Phone app uses a toggle on the filter button to let users filter their recent calls.  The app adds a blue highlight to indicate when the toggle is active, and removes it when the toggle is inactive.\nAvoid supplying a label that explains the button’s purpose. The interface icon you create — combined with the alternative background appearances you supply — help people understand what the button does. For developer guidance, see changesSelectionAsPrimaryAction.\nmacOS\nIn addition to the switch toggle style, macOS supports the checkbox style and also defines radio buttons that can provide similar behaviors.\nUse switches, checkboxes, and radio buttons in the window body, not the window frame. In particular, avoid using these components in a toolbar or status bar.\nSwitches\nPrefer a switch for settings that you want to emphasize. A switch has more visual weight than a checkbox, so it looks better when it controls more functionality than a checkbox typically does. For example, you might use a switch to let people turn on or off a group of settings, instead of just one setting. For developer guidance, see switch.\nWithin a grouped form, consider using a mini switch to control the setting in a single row. The height of a mini switch is similar to the height of buttons and other controls, resulting in rows that have a consistent height. If you need to present a hierarchy of settings within a grouped form, you can use a regular switch for the primary setting and mini switches for the subordinate settings. For developer guidance, see GroupedFormStyle and ControlSize.\nIn general, don’t replace a checkbox with a switch. If you’re already using a checkbox in your interface, it’s probably best to keep using it.\nCheckboxes\nA checkbox is a small, square button that’s empty when the button is off, contains a checkmark when the button is on, and can contain a dash when the button’s state is mixed. Typically, a checkbox includes a title on its trailing side. In an editable checklist, a checkbox can appear without a title or any additional content.\nUse a checkbox instead of a switch if you need to present a hierarchy of settings. The visual style of checkboxes helps them align well and communicate grouping. By using alignment — generally along the leading edge of the checkboxes — and indentation, you can show dependencies, such as when the state of a checkbox governs the state of subordinate checkboxes.\n\nConsider using radio buttons if you need to present a set of more than two mutually exclusive options. When people need to choose from options in addition to just “on” or “off,” using multiple radio buttons can help you clarify each option with a unique label.\nConsider using a label to introduce a group of checkboxes if their relationship isn’t clear. Describe the set of options, and align the label’s baseline with the first checkbox in the group.\nAccurately reflect a checkbox’s state in its appearance. A checkbox’s state can be on, off, or mixed. If you use a checkbox to globally turn on and off multiple subordinate checkboxes, show a mixed state when the subordinate checkboxes have different states. For example, you might need to present a text-style setting that turns all styles on or off, but also lets people choose a subset of individual style settings like bold, italic, or underline. For developer guidance, see allowsMixedState.\nRadio buttons\nA radio button is a small, circular button followed by a label. Typically displayed in groups of two to five, radio buttons present a set of mutually exclusive choices.\n\nA radio button’s state is either selected (a filled circle) or deselected (an empty circle). Although a radio button can also display a mixed state (indicated by a dash), this state is rarely useful because you can communicate multiple states by using additional radio buttons. If you need to show that a setting or item has a mixed state, consider using a checkbox instead.\nPrefer a set of radio buttons to present mutually exclusive options. If you need to let people choose multiple options in a set, use checkboxes instead.\nAvoid listing too many radio buttons in a set. A long list of radio buttons takes up a lot of space in the interface and can be overwhelming. If you need to present more than about five options, consider using a component like a Pop-up buttons instead.\nTo present a single setting that can be on or off, prefer a checkbox. Although a single radio button can also turn something on or off, the presence or absence of the checkmark in a checkbox can make the current state easier to understand at a glance. In rare cases where a single checkbox doesn’t clearly communicate the opposing states, you can use a pair of radio buttons, each with a label that specifies the state it controls.\nUse consistent spacing when you display radio buttons horizontally. Measure the space needed to accommodate the longest button label, and use that measurement consistently.\n\nResources\nRelated\nLayout\nDeveloper documentation\nToggle — SwiftUI\nUISwitch — UIKit\nNSButton.ButtonType.toggle — AppKit\nNSSwitch — AppKit\nChange log\n | \n | \n | \n",
+   "contentJson": [
+    {
+     "inlineContent": [
+      {
+       "identifier": "components-toggles-intro.png",
+       "type": "image"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A toggle can have various styles, such as switch and checkbox, and different platforms can use these styles in different ways. For guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.HIG/design/Human-Interface-Guidelines/toggles#Platform-considerations",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Platform considerations",
+       "_resolvedKey": "design/human-interface-guidelines/toggles"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In addition to toggles, all platforms also support buttons that behave like toggles by using a different appearance for each state. For developer guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/SwiftUI/ToggleStyle",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "ToggleStyle",
+       "_resolvedKey": "swiftui/togglestyle"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Best-practices",
+     "level": 2,
+     "text": "Best practices",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Use a toggle to help people choose between two opposing values that affect the state of content or a view.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " A toggle always lets people manage the state of something, so if you need to support other types of actions — such as choosing from a list of items — use a different component, like a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.HIG/design/Human-Interface-Guidelines/pop-up-buttons",
+       "isActive": true,
+       "overridingTitle": "pop-up button",
+       "overridingTitleInlineContent": [
+        {
+         "text": "pop-up button",
+         "type": "text"
+        }
+       ],
+       "type": "reference",
+       "_resolvedTitle": "Pop-up buttons",
+       "_resolvedKey": "design/human-interface-guidelines/pop-up-buttons"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Clearly identify the setting, view, or content the toggle affects.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " In general, the surrounding context provides enough information for people to understand what they’re turning on or off. In some cases, often in macOS apps, you can also supply a label to describe the state the toggle controls. If you use a button that behaves like a toggle, you generally use an interface icon that communicates its purpose, and you update its appearance — typically by changing the background — based on the current state.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Make sure the visual differences in a toggle’s state are obvious.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " For example, you might add or remove a color fill, show or hide the background shape, or change the inner details you display — like a checkmark or dot — to show that a toggle is on or off. Avoid relying solely on different colors to communicate state, because not everyone can perceive the differences.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Platform-considerations",
+     "level": 2,
+     "text": "Platform considerations",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "No additional considerations for tvOS, visionOS, or watchOS.",
+         "type": "text"
+        }
+       ],
+       "type": "emphasis"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "iOS-iPadOS",
+     "level": 3,
+     "text": "iOS, iPadOS",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Use the switch toggle style only in a list row.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " You don’t need to supply a label in this situation because the content in the row provides the context for the state the switch controls.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Change the default color of a switch only if necessary.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " The default green color tends to work well in most cases, but you might want to use your app’s accent color instead. Be sure to use a color that provides enough contrast with the uncolored appearance to be perceptible.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "columns": [
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "toggles-ios-default-color.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Standard switch color",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      },
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "toggles-ios-custom-color.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Custom switch color",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      }
+     ],
+     "numberOfColumns": 2,
+     "type": "row"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Outside of a list, use a button that behaves like a toggle, not a switch.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " For example, the Phone app uses a toggle on the filter button to let users filter their recent calls.  The app adds a blue highlight to indicate when the toggle is active, and removes it when the toggle is inactive.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "columns": [
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "toggles-ios-phone-filter-on.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "The Phone app uses a toggle to switch between all recent calls and various filter options. When someone chooses a filter, the toggle appears with a custom background drawn behind the symbol.",
+              "type": "text"
+             }
+            ],
+            "deviceFrame": "iPhone16-top-half"
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      },
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "toggles-ios-phone-filter-off.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "When someone returns to the main Recents view, the toggle appears without anything behind the symbol.",
+              "type": "text"
+             }
+            ],
+            "deviceFrame": "iPhone16-top-half"
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      }
+     ],
+     "numberOfColumns": 2,
+     "type": "row"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Avoid supplying a label that explains the button’s purpose.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " The interface icon you create — combined with the alternative background appearances you supply — help people understand what the button does. For developer guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UIButton/changesSelectionAsPrimaryAction",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "changesSelectionAsPrimaryAction",
+       "_resolvedKey": "uikit/uibutton/changesselectionasprimaryaction"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "macOS",
+     "level": 3,
+     "text": "macOS",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In addition to the switch toggle style, macOS supports the checkbox style and also defines radio buttons that can provide similar behaviors.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Use switches, checkboxes, and radio buttons in the window body, not the window frame.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " In particular, avoid using these components in a toolbar or status bar.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Switches",
+     "level": 4,
+     "text": "Switches",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Prefer a switch for settings that you want to emphasize.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " A switch has more visual weight than a checkbox, so it looks better when it controls more functionality than a checkbox typically does. For example, you might use a switch to let people turn on or off a group of settings, instead of just one setting. For developer guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/SwiftUI/ToggleStyle/switch",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "switch",
+       "_resolvedKey": "swiftui/togglestyle/switch"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Within a grouped form, consider using a mini switch to control the setting in a single row.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " The height of a mini switch is similar to the height of buttons and other controls, resulting in rows that have a consistent height. If you need to present a hierarchy of settings within a grouped form, you can use a regular switch for the primary setting and mini switches for the subordinate settings. For developer guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/SwiftUI/GroupedFormStyle",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "GroupedFormStyle",
+       "_resolvedKey": "swiftui/groupedformstyle"
+      },
+      {
+       "text": " and ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/SwiftUI/ControlSize",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "ControlSize",
+       "_resolvedKey": "swiftui/controlsize"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "In general, don’t replace a checkbox with a switch.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " If you’re already using a checkbox in your interface, it’s probably best to keep using it.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Checkboxes",
+     "level": 4,
+     "text": "Checkboxes",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A checkbox is a small, square button that’s empty when the button is off, contains a checkmark when the button is on, and can contain a dash when the button’s state is mixed. Typically, a checkbox includes a title on its trailing side. In an editable checklist, a checkbox can appear without a title or any additional content.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Use a checkbox instead of a switch if you need to present a hierarchy of settings.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " The visual style of checkboxes helps them align well and communicate grouping. By using alignment — generally along the leading edge of the checkboxes — and indentation, you can show dependencies, such as when the state of a checkbox governs the state of subordinate checkboxes.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "checkbox-alignment.png",
+       "type": "image"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Consider using radio buttons if you need to present a set of more than two mutually exclusive options.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " When people need to choose from options in addition to just “on” or “off,” using multiple radio buttons can help you clarify each option with a unique label.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Consider using a label to introduce a group of checkboxes if their relationship isn’t clear.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " Describe the set of options, and align the label’s baseline with the first checkbox in the group.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Accurately reflect a checkbox’s state in its appearance.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " A checkbox’s state can be on, off, or mixed. If you use a checkbox to globally turn on and off multiple subordinate checkboxes, show a mixed state when the subordinate checkboxes have different states. For example, you might need to present a text-style setting that turns all styles on or off, but also lets people choose a subset of individual style settings like bold, italic, or underline. For developer guidance, see ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSButton/allowsMixedState",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "allowsMixedState",
+       "_resolvedKey": "appkit/nsbutton/allowsmixedstate"
+      },
+      {
+       "text": ".",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "columns": [
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "checkbox-selected.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "On",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      },
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "checkbox-deselected.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Off",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      },
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "checkbox-mixed.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Mixed",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      }
+     ],
+     "numberOfColumns": 3,
+     "type": "row"
+    },
+    {
+     "anchor": "Radio-buttons",
+     "level": 4,
+     "text": "Radio buttons",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A radio button is a small, circular button followed by a label. Typically displayed in groups of two to five, radio buttons present a set of mutually exclusive choices.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "radio-button-example.png",
+       "type": "image"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A radio button’s state is either selected (a filled circle) or deselected (an empty circle). Although a radio button can also display a mixed state (indicated by a dash), this state is rarely useful because you can communicate multiple states by using additional radio buttons. If you need to show that a setting or item has a mixed state, consider using a checkbox instead.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "columns": [
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "radio-button-selected.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Selected",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      },
+      {
+       "alignment": "leading",
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "identifier": "radio-button-deselected.png",
+           "metadata": {
+            "abstract": [
+             {
+              "text": "Deselected",
+              "type": "text"
+             }
+            ]
+           },
+           "type": "image"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       "size": 1
+      }
+     ],
+     "numberOfColumns": 2,
+     "type": "row"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Prefer a set of radio buttons to present mutually exclusive options.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " If you need to let people choose multiple options in a set, use checkboxes instead.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Avoid listing too many radio buttons in a set.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " A long list of radio buttons takes up a lot of space in the interface and can be overwhelming. If you need to present more than about five options, consider using a component like a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.HIG/design/Human-Interface-Guidelines/pop-up-buttons",
+       "isActive": true,
+       "overridingTitle": "pop-up button",
+       "overridingTitleInlineContent": [
+        {
+         "text": "pop-up button",
+         "type": "text"
+        }
+       ],
+       "type": "reference",
+       "_resolvedTitle": "Pop-up buttons",
+       "_resolvedKey": "design/human-interface-guidelines/pop-up-buttons"
+      },
+      {
+       "text": " instead.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "To present a single setting that can be on or off, prefer a checkbox.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " Although a single radio button can also turn something on or off, the presence or absence of the checkmark in a checkbox can make the current state easier to understand at a glance. In rare cases where a single checkbox doesn’t clearly communicate the opposing states, you can use a pair of radio buttons, each with a label that specifies the state it controls.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "inlineContent": [
+        {
+         "text": "Use consistent spacing when you display radio buttons horizontally.",
+         "type": "text"
+        }
+       ],
+       "type": "strong"
+      },
+      {
+       "text": " Measure the space needed to accommodate the longest button label, and use that measurement consistently.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "radio-button-equal-spacing.png",
+       "type": "image"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Resources",
+     "level": 2,
+     "text": "Resources",
+     "type": "heading"
+    },
+    {
+     "anchor": "Related",
+     "level": 4,
+     "text": "Related",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "doc://com.apple.HIG/design/Human-Interface-Guidelines/layout",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Layout",
+       "_resolvedKey": "design/human-interface-guidelines/layout"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Developer-documentation",
+     "level": 4,
+     "text": "Developer documentation",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/SwiftUI/Toggle",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Toggle",
+       "_resolvedKey": "swiftui/toggle"
+      },
+      {
+       "text": " — SwiftUI",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/UIKit/UISwitch",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "UISwitch",
+       "_resolvedKey": "uikit/uiswitch"
+      },
+      {
+       "text": " — UIKit",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSButton/ButtonType/toggle",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "NSButton.ButtonType.toggle",
+       "_resolvedKey": "appkit/nsbutton/buttontype/toggle"
+      },
+      {
+       "text": " — AppKit",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/AppKit/NSSwitch",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "NSSwitch",
+       "_resolvedKey": "appkit/nsswitch"
+      },
+      {
+       "text": " — AppKit",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "anchor": "Change-log",
+     "level": 2,
+     "text": "Change log",
+     "type": "heading"
+    },
+    {
+     "header": "row",
+     "rows": [
+      [
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "Date",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "Changes",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ]
+      ],
+      [
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "March 29, 2024",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "Enhanced guidance for using switches in macOS apps, clarified when a checkbox has a title, and added artwork for radio buttons.",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ]
+      ],
+      [
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "September 12, 2023",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ],
+       [
+        {
+         "inlineContent": [
+          {
+           "text": "Updated artwork.",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ]
+      ]
+     ],
+     "type": "table"
+    }
+   ],
+   "sortOrder": 4
+  }
+ ],
+ "relationships": []
+}

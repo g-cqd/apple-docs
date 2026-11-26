@@ -1,3 +1,4 @@
+import AppleDocsCore
 import Foundation
 
 /// Renders the Markdown subset produced by the DocC/HTML content converters into escaped HTML.
@@ -36,10 +37,52 @@ enum WebMarkdownBlockRenderer {
     static func renderInline(_ raw: some StringProtocol) -> String {
         var out = ""
         for (index, segment) in raw.split(separator: "`", omittingEmptySubsequences: false).enumerated() {
-            let escaped = WebHTMLRenderer.escapeHTML(String(segment))
-            out += index.isMultiple(of: 2) ? emphasize(escaped) : "<code>\(escaped)</code>"
+            out +=
+                index.isMultiple(of: 2)
+                ? linked(segment) : "<code>\(WebHTMLRenderer.escapeHTML(String(segment)))</code>"
         }
         return out
+    }
+
+    /// Escapes `text` and turns `[title](document/key)` references (as stored by the content normalizer) into
+    /// `/doc/<key>` links; the target must be a valid ``DocumentKey`` (balanced parentheses allowed).
+    private static func linked(_ text: some StringProtocol) -> String {
+        var out = ""
+        var rest = Substring(text)
+        while let open = rest.firstIndex(of: "["), let close = rest[open...].firstIndex(of: "]"),
+            rest.index(after: close) < rest.endIndex, rest[rest.index(after: close)] == "(",
+            let end = matchingParenthesis(in: rest, from: rest.index(after: close))
+        {
+            let title = rest[rest.index(after: open) ..< close]
+            let target = rest[rest.index(close, offsetBy: 2) ..< end]
+            out += emphasize(WebHTMLRenderer.escapeHTML(String(rest[..<open])))
+            if let key = try? DocumentKey(String(target)) {
+                out +=
+                    "<a href=\"/doc/\(WebHTMLRenderer.escapeHTML(key.rawValue))\">"
+                    + emphasize(WebHTMLRenderer.escapeHTML(String(title))) + "</a>"
+            } else {
+                out += emphasize(WebHTMLRenderer.escapeHTML(String(rest[open ... end])))
+            }
+            rest = rest[rest.index(after: end)...]
+        }
+        return out + emphasize(WebHTMLRenderer.escapeHTML(String(rest)))
+    }
+
+    /// Index of the `)` closing the `(` at `start`, counting nested parentheses.
+    private static func matchingParenthesis(in text: Substring, from start: Substring.Index) -> Substring.Index? {
+        var depth = 0
+        var index = start
+        while index < text.endIndex {
+            switch text[index] {
+                case "(": depth += 1
+                case ")":
+                    depth -= 1
+                    if depth == 0 { return index }
+                default: break
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 
     private static func emphasize(_ escaped: String) -> String {

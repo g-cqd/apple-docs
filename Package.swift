@@ -80,7 +80,8 @@ let package = Package(
                 .product(name: "AemiJSON", package: "AemiJSON"),
                 .product(name: "AemiMarkdown", package: "AemiMarkdown"),
                 .product(name: "AemiYAML", package: "AemiHMMML"),
-                .product(name: "AemiLexers", package: "aemi")
+                .product(name: "AemiLexers", package: "aemi"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsContent",
             swiftSettings: strictSettings
@@ -240,6 +241,16 @@ let package = Package(
                 "AppleDocsStorage", "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSetupTests",
+            swiftSettings: strictSettings
+        ),
+        .testTarget(
+            name: "AppleDocsContentTests",
+            dependencies: [
+                "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
+                .product(name: "AemiJSON", package: "AemiJSON")
+            ],
+            path: "Tests/AppleDocsContentTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: strictSettings
         ),
         .testTarget(

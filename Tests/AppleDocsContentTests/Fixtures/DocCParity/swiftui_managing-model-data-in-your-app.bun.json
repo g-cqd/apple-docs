@@ -1,0 +1,2601 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "swiftui/managing-model-data-in-your-app",
+  "title": "Managing model data in your app",
+  "kind": "sampleCode",
+  "role": "sampleCode",
+  "roleHeading": "Sample Code",
+  "framework": "swiftui",
+  "url": "https://developer.apple.com/documentation/swiftui/managing-model-data-in-your-app",
+  "language": "swift",
+  "abstractText": "Create connections between your app’s data model and views.",
+  "declarationText": null,
+  "platformsJson": "{\"ios\":\"17.0\",\"ipados\":\"17.0\",\"maccatalyst\":\"17.0\",\"macos\":\"14.0\",\"xcode\":\"15.0\"}",
+  "minIos": "17.0",
+  "minMacos": "14.0",
+  "minWatchos": null,
+  "minTvos": null,
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": "Overview Make model data observable Observe model data in a view Create the source of truth for model data Share model data throughout a view hierarchy Change model data in a view",
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "Create connections between your app’s data model and views.",
+   "contentJson": [
+    {
+     "text": "Create connections between your app’s data model and views.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "discussion",
+   "heading": "Overview",
+   "contentText": "Overview\nA SwiftUI app can display data that people can change using the app’s user interface (UI). To manage that data, an app creates a data model, which is a custom type that represents the data. A data model provides separation between the data and the views that interact with the data. This separation promotes modularity, improves testability, and helps make it easier to reason about how the app works.\nKeeping the model data (that is, an instance of a data model) in sync with what appears on the screen can be challenging, especially when the data appears in multiple views of the UI at the same time.\nSwiftUI helps keep your app’s UI up to date with changes made to the data thanks to Observation. With Observation, a view in SwiftUI can form dependencies on observable data models and update the UI when data changes.\nnote: Observation support in SwiftUI is available starting with iOS 17, iPadOS 17, macOS 14, tvOS 17, and watchOS 10. For information about adopting Observation in existing apps, see Migrating from the Observable Object protocol to the Observable macro.\nMake model data observable\nTo make data changes visible to SwiftUI, apply the Observable() macro to your data model. This macro generates code that adds observation support to your data model at compile time, keeping your data model code focused on the properties that store data. For example, the following code defines a data model for books:\n@Observable class Book: Identifiable {\n    var title = \"Sample Book Title\"\n    var author = Author()\n    var isAvailable = true\n}\nimportant: The Observable() macro, in addition to adding observation functionality, also conforms your data model type to the Observable protocol, which serves as a signal to other APIs that your type supports observation. Don’t apply the Observable protocol by itself to your data model type, since that alone doesn’t add any observation functionality. Instead, always use the Observable macro when adding observation support to your type.\nObserve model data in a view\nIn SwiftUI, a view forms a dependency on an observable data model object, such as an instance of Book, when the view’s body property reads a property of the object. If body doesn’t read any properties of an observable data model object, the view doesn’t track any dependencies.\nWhen a tracked property changes, SwiftUI updates the view. If other properties change that body doesn’t read, the view is unaffected and avoids unnecessary updates. For example, the view in the following code updates only when a book’s title changes but not when author or isAvailable changes:\nstruct BookView: View {\n    var book: Book\n    \n    var body: some View {\n        Text(book.title)\n    }\n}\nSwiftUI establishes this dependency tracking even if the view doesn’t store the observable type, such as when using a global property or singleton:\nvar globalBook: Book = Book()\n\nstruct BookView: View {\n    var body: some View {\n        Text(globalBook.title)\n    }\n}\nObservation also supports tracking of computed properties when the computed property makes use of an observable property. For instance, the view in the following code updates when the number of available books changes:\n@Observable class Library {\n    var books: [Book] = [Book(), Book(), Book()]\n    \n    var availableBooksCount: Int {\n        books.filter(\\.isAvailable).count\n    }\n}\n\nstruct LibraryView: View {\n    @Environment(Library.self) private var library\n    \n    var body: some View {\n        NavigationStack {\n            List(library.books) { book in\n                // ...\n            }\n            .navigationTitle(\"Books available: \\(library.availableBooksCount)\")\n        }\n    }\n}\nWhen a view forms a dependency on a collection of objects, of any collection type, the view tracks changes made to the collection itself. For instance, the view in the following code forms a dependency on books because body reads it. As changes occur to books, such as inserting, deleting, moving, or replacing items in the collection, SwiftUI updates the view.\nstruct LibraryView: View {\n    @State private var books = [Book(), Book(), Book()]\n\n    var body: some View {\n        List(books) { book in \n            Text(book.title)\n        }\n    }\n}\nHowever, LibraryView doesn’t form a dependency on the property title because the view’s body doesn’t read it directly. The view stores the List content closure as an @escaping closure that SwiftUI calls when lazily creating list items before they appear on the screen. This means that instead of LibraryView depending on a book’s title, each Text item of the list depends on title. Any changes to a title updates only the individual Text representing the book and not the others.\nnote: Observation tracks changes to any observable property that appears in the execution scope of a view’s body property.\nYou can also share an observable model data object with another view. The receiving view forms a dependency if it reads any properties of the object in its body. For example, in the following code LibraryView shares an instance of Book with BookView, and BookView displays the book’s title. If the book’s title changes, SwiftUI updates only BookView, and not LibraryView, because only BookView reads the title property.\nstruct LibraryView: View {\n    @State private var books = [Book(), Book(), Book()]\n\n    var body: some View {\n        List(books) { book in \n            BookView(book: book)\n        }\n    }\n}\n\nstruct BookView: View {\n    var book: Book\n    \n    var body: some View {\n        Text(book.title)\n    }\n}\nIf a view doesn’t have any dependencies, SwiftUI doesn’t update the view when data changes. This approach allows an observable model data object to pass through multiple layers of a view hierarchy without each intermediate view forming a dependency.\n// Will not update when any property of `book` changes.\nstruct LibraryView: View {\n    @State private var books = [Book(), Book(), Book()]\n    \n    var body: some View {\n        List(books) { book in \n            LibraryItemView(book: book)\n        }\n    }\n}\n\n// Will not update when any property of `book` changes.\nstruct LibraryItemView: View {\n    var book: Book\n    \n    var body: some View {\n        BookView(book: book)\n    }\n}\n\n// Will update when `book.title` changes.\nstruct BookView: View {\n    var book: Book\n    \n    var body: some View {\n        Text(book.title)\n    }\n}\nHowever, a view that stores a reference to the observable object updates if the reference changes. This happens because the stored reference is part of the view’s value and not because the object is observable. For example, if the reference to book in the following code changes, SwiftUI updates the view:\nstruct BookView: View {\n    var book: Book\n    \n    var body: some View {\n        // ...\n    }\n}\nA view can also form a dependency on an observable data model object accessed through another object. For example, the view in the following code updates when the author’s name changes:\nstruct LibraryItemView: View {\n    var book: Book\n    \n    var body: some View {\n        VStack(alignment: .leading) {\n            Text(book.title)\n            Text(\"Written by: \\(book.author.name)\")\n                .font(.caption)\n        }\n    }\n}\nCreate the source of truth for model data\nTo create and store the source of truth for model data, declare a private variable and initialize it with a instance of an observable data model type. Then add the State() macro to declare that SwiftUI manages the property. For example, the following code stores an instance of the data model type Book in the state variable book:\nstruct BookView: View {\n    @State private var book = Book()\n    \n    var body: some View {\n        Text(book.title)\n    }\n}\nBy wrapping the book with State(), you’re telling SwiftUI to manage the storage of the instance. Each time SwiftUI re-creates BookView, it connects the book variable to the managed instance, providing the view a single source of truth for the model data.\nYou can also create a state object in your top-level App instance or in one of your app’s Scene instances. For example, the following code creates an instance of Library in the app’s top-level structure:\n@main\nstruct BookReaderApp: App {\n    @State private var library = Library()\n    \n    var body: some Scene {\n        WindowGroup {\n            LibraryView()\n                .environment(library)\n        }\n    }\n}\nShare model data throughout a view hierarchy\nIf you have a data model object, like Library, that you want to share throughout your app, you can either:\npass the data model object to each view in the view hierarchy; or\nadd the data model object to the view’s environment\nPassing model data to each view is convenient when you have a shallow view hierarchy; for example, when a view doesn’t share the object with its subviews. However, you usually don’t know if a view needs to pass the object to subviews, and you may not know if a subview deep inside the layers of the hierarchy needs the model data.\nTo share model data throughout a view hierarchy without needing to pass it to each view, add the model data to the view’s environment. You can add the data to the environment using either environment(_:_:) or the environment(_:) modifier, passing in the model data.\nBefore you can use the environment(_:_:) modifier, you need to create a custom EnvironmentKey. Then extend EnvironmentValues to include a custom environment property that gets and sets the value for the custom key. For instance, the following code creates an environment key and property for library:\nextension EnvironmentValues {\n    var library: Library {\n        get { self[LibraryKey.self] }\n        set { self[LibraryKey.self] = newValue }\n    }\n}\n\nprivate struct LibraryKey: EnvironmentKey {\n    static let defaultValue: Library = Library()\n}\nWith the custom environment key and property in place, a view can add model data to its environment. For example, LibraryView adds the source of truth for a Library instance to its environment using the environment(_:_:) modifier:\n@main\nstruct BookReaderApp: App {\n    @State private var library = Library()\n    \n    var body: some Scene {\n        WindowGroup {\n            LibraryView()\n                .environment(\\.library, library)\n        }\n    }\n}\nTo retrieve the Library instance from the environment, a view defines a local variable that stores a reference to the instance, and then wraps the variable with the Environment property wrapper, passing in the key path to the custom environment value.\nstruct LibraryView: View {\n    @Environment(\\.library) private var library\n\n    var body: some View {\n        // ...\n    }\n}\nYou can also store model data directly in the environment without defining a custom environment value by using the environment(_:) modifier. For instance, the following code adds a Library instance to the environment using this modifier:\n@main\nstruct BookReaderApp: App {\n    @State private var library = Library()\n    \n    var body: some Scene {\n        WindowGroup {\n            LibraryView()\n                .environment(library)\n        }\n    }\n}\nTo retrieve the instance from the environment, another view defines a local variable to store the instance and wraps it with the Environment property wrapper. But instead of providing a key path to the environment value, you can provide the model data type, as shown in the following code:\nstruct LibraryView: View {\n    @Environment(Library.self) private var library\n    \n    var body: some View {\n        // ...\n    }\n}\nBy default, reading an object from the environment returns a non-optional object when using the object type as the key. This default behavior assumes that a view in the current hierarchy previously stored a non-optional instance of the type using the environment(_:) modifier. If a view attempts to retrieve an object using its type and that object isn’t in the environment, SwiftUI throws exception.\nIn cases where there is no guarantee that an object is in the environment, retrieve an optional version of the object as shown in the following code. If the object isn’t available in the environment, SwiftUI returns nil instead of throwing an exception.\n@Environment(Library.self) private var library: Library?\nChange model data in a view\nIn most apps, people can change data that the app presents. When data changes, any views that display the data should update to reflect the changed data. With Observation in SwiftUI, a view can support data changes without using property wrappers or bindings. For example, the following toggles the isAvailable property of a book in the action closure of a button:\nstruct BookView: View {\n    var book: Book\n    \n    var body: some View {\n        List {\n            Text(book.title)\n            HStack {\n                Text(book.isAvailable ? \"Available for checkout\" : \"Waiting for return\")\n                Spacer()\n                Button(book.isAvailable ? \"Check out\" : \"Return\") {\n                    book.isAvailable.toggle()\n                }\n            }\n        }\n    }\n}\nHowever, there may be times when a view expects a binding before it can change the value of a mutable property. To provide a binding, wrap the model data with the Bindable property wrapper. For example, the following code wraps the book variable with @Bindable. Then it uses a TextField to change the title property of a book, and a Toggle to change the isAvailable property, using the $ syntax to pass a binding to each property.\nstruct BookEditView: View {\n    @Bindable var book: Book\n    @Environment(\\.dismiss) private var dismiss\n    \n    var body: some View {\n        VStack() {\n            HStack {\n                Text(\"Title\")\n                TextField(\"Title\", text: $book.title)\n                    .textFieldStyle(.roundedBorder)\n                    .onSubmit {\n                        dismiss()\n                    }\n            }\n            \n            Toggle(isOn: $book.isAvailable) {\n                Text(\"Book is available\")\n            }\n            \n            Button(\"Close\") {\n                dismiss()\n            }\n            .buttonStyle(.borderedProminent)\n        }\n        .padding()\n    }\n}\nYou can use the Bindable property wrapper on properties and variables to an Observable object. This includes global variables, properties that exist outside of SwiftUI types, or even local variables. For example, you can create a @Bindable variable within a view’s body:\nstruct LibraryView: View {\n    @State private var books = [Book(), Book(), Book()]\n\n    var body: some View {\n        List(books) { book in \n            @Bindable var book = book\n            TextField(\"Title\", text: $book.title)\n        }\n    }\n}\nThe @Bindable variable book provides a binding that connects TextField to the title property of a book so that a person can make changes directly to the model data.\n",
+   "contentJson": [
+    {
+     "anchor": "Overview",
+     "level": 2,
+     "text": "Overview",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A SwiftUI app can display data that people can change using the app’s user",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "interface (UI). To manage that data, an app creates a data model, which is a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "custom type that represents the data. A data model provides separation between",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the data and the views that interact with the data. This separation promotes",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "modularity, improves testability, and helps make it easier to reason about how",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the app works.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Keeping the model data (that is, an instance of a data model) in sync with what",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "appears on the screen can be challenging, especially when the data appears in",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "multiple views of the UI at the same time.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "SwiftUI helps keep your app’s UI up to date with changes made to the data",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "thanks to Observation. With ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Observation",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Observation",
+       "_resolvedKey": "observation"
+      },
+      {
+       "text": ",",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "a view in SwiftUI can form dependencies on observable data models and update",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the UI when data changes.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.documentation/documentation/Observation",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Observation",
+         "_resolvedKey": "observation"
+        },
+        {
+         "text": " support in",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "SwiftUI is available starting with iOS 17, iPadOS 17, macOS 14, tvOS 17, and",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "watchOS 10. For information about adopting Observation in existing apps, see",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Migrating-from-the-observable-object-protocol-to-the-observable-macro",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Migrating from the Observable Object protocol to the Observable macro",
+         "_resolvedKey": "swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro"
+        },
+        {
+         "text": ".",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "Note",
+     "style": "note",
+     "type": "aside"
+    },
+    {
+     "anchor": "Make-model-data-observable",
+     "level": 3,
+     "text": "Make model data observable",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To make data changes visible to SwiftUI, apply the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Observation/Observable()",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Observable()",
+       "_resolvedKey": "observation/observable()"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "macro to your data model. This macro generates code that adds observation",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "support to your data model at compile time, keeping your data model code focused",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "on the properties that store data. For example, the following code defines a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "data model for books:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@Observable class Book: Identifiable {",
+      "    var title = \"Sample Book Title\"",
+      "    var author = Author()",
+      "    var isAvailable = true",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "The ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.documentation/documentation/Observation/Observable()",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Observable()",
+         "_resolvedKey": "observation/observable()"
+        },
+        {
+         "text": "",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "macro, in addition to adding observation functionality, also conforms your data",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "model type to the ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.documentation/documentation/Observation/Observable",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "Observable",
+         "_resolvedKey": "observation/observable"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "protocol, which serves as a signal to other APIs that your type supports",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "observation. Don’t apply the ",
+         "type": "text"
+        },
+        {
+         "code": "Observable",
+         "type": "codeVoice"
+        },
+        {
+         "text": " protocol by itself to your data model",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "type, since that alone doesn’t add any observation functionality. Instead,",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "always use the ",
+         "type": "text"
+        },
+        {
+         "code": "Observable",
+         "type": "codeVoice"
+        },
+        {
+         "text": " macro when adding observation support to your type.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "Important",
+     "style": "important",
+     "type": "aside"
+    },
+    {
+     "anchor": "Observe-model-data-in-a-view",
+     "level": 3,
+     "text": "Observe model data in a view",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In SwiftUI, a view forms a dependency on an observable data model object, such",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "as an instance of ",
+       "type": "text"
+      },
+      {
+       "code": "Book",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", when the view’s ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "body",
+       "_resolvedKey": "swiftui/view/body-8kl5o"
+      },
+      {
+       "text": " property",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "reads a property of the object. If ",
+       "type": "text"
+      },
+      {
+       "code": "body",
+       "type": "codeVoice"
+      },
+      {
+       "text": " doesn’t read any properties of an",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "observable data model object, the view doesn’t track any dependencies.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "When a tracked property changes, SwiftUI updates the view. If other properties",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "change that ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "body",
+       "_resolvedKey": "swiftui/view/body-8kl5o"
+      },
+      {
+       "text": " doesn’t read, the view is unaffected and",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "avoids unnecessary updates. For example, the view in the following code updates",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "only when a book’s ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " changes but not when ",
+       "type": "text"
+      },
+      {
+       "code": "author",
+       "type": "codeVoice"
+      },
+      {
+       "text": " or ",
+       "type": "text"
+      },
+      {
+       "code": "isAvailable",
+       "type": "codeVoice"
+      },
+      {
+       "text": "",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "changes:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct BookView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        Text(book.title)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "SwiftUI establishes this dependency tracking even if the view doesn’t store the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "observable type, such as when using a global property or singleton:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "var globalBook: Book = Book()",
+      "",
+      "struct BookView: View {",
+      "    var body: some View {",
+      "        Text(globalBook.title)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Observation also supports tracking of computed properties when the computed",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "property makes use of an observable property. For instance, the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "view in the following code updates when the number of available books changes:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@Observable class Library {",
+      "    var books: [Book] = [Book(), Book(), Book()]",
+      "    ",
+      "    var availableBooksCount: Int {",
+      "        books.filter(\\.isAvailable).count",
+      "    }",
+      "}",
+      "",
+      "struct LibraryView: View {",
+      "    @Environment(Library.self) private var library",
+      "    ",
+      "    var body: some View {",
+      "        NavigationStack {",
+      "            List(library.books) { book in",
+      "                // ...",
+      "            }",
+      "            .navigationTitle(\"Books available: \\(library.availableBooksCount)\")",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "When a view forms a dependency on a collection of objects, of any collection",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "type, the view tracks changes made to the collection itself. For instance, the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "view in the following code forms a dependency on ",
+       "type": "text"
+      },
+      {
+       "code": "books",
+       "type": "codeVoice"
+      },
+      {
+       "text": " because ",
+       "type": "text"
+      },
+      {
+       "code": "body",
+       "type": "codeVoice"
+      },
+      {
+       "text": " reads",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "it. As changes occur to ",
+       "type": "text"
+      },
+      {
+       "code": "books",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", such as inserting, deleting, moving, or",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "replacing items in the collection, SwiftUI updates the view.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryView: View {",
+      "    @State private var books = [Book(), Book(), Book()]",
+      "",
+      "    var body: some View {",
+      "        List(books) { book in ",
+      "            Text(book.title)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "However, ",
+       "type": "text"
+      },
+      {
+       "code": "LibraryView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " doesn’t form a dependency on the property ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "because the view’s ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "body",
+       "_resolvedKey": "swiftui/view/body-8kl5o"
+      },
+      {
+       "text": " doesn’t read it directly. The",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "view stores the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/List",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "List",
+       "_resolvedKey": "swiftui/list"
+      },
+      {
+       "text": " content closure as an ",
+       "type": "text"
+      },
+      {
+       "code": "@escaping",
+       "type": "codeVoice"
+      },
+      {
+       "text": " closure that SwiftUI",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "calls when lazily creating list items before they appear on the screen. This",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "means that instead of ",
+       "type": "text"
+      },
+      {
+       "code": "LibraryView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " depending on a book’s ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", each",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Text",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Text",
+       "_resolvedKey": "swiftui/text"
+      },
+      {
+       "text": " item of the list depends on ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": ". Any changes to a ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " updates",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "only the individual ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Text",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Text",
+       "_resolvedKey": "swiftui/text"
+      },
+      {
+       "text": " representing the book and not the others.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "content": [
+      {
+       "inlineContent": [
+        {
+         "text": "Observation tracks changes to any observable property",
+         "type": "text"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "that appears in the execution scope of a view’s ",
+         "type": "text"
+        },
+        {
+         "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+         "isActive": true,
+         "type": "reference",
+         "_resolvedTitle": "body",
+         "_resolvedKey": "swiftui/view/body-8kl5o"
+        },
+        {
+         "text": " ",
+         "type": "text"
+        },
+        {
+         "text": "property.",
+         "type": "text"
+        }
+       ],
+       "type": "paragraph"
+      }
+     ],
+     "name": "Note",
+     "style": "note",
+     "type": "aside"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can also share an observable model data object with another view. The",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "receiving view forms a dependency if it reads any properties of the object in",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "its ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "body",
+       "_resolvedKey": "swiftui/view/body-8kl5o"
+      },
+      {
+       "text": ". For example, in the following code",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "LibraryView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " shares an instance of ",
+       "type": "text"
+      },
+      {
+       "code": "Book",
+       "type": "codeVoice"
+      },
+      {
+       "text": " with ",
+       "type": "text"
+      },
+      {
+       "code": "BookView",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", and ",
+       "type": "text"
+      },
+      {
+       "code": "BookView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "displays the book’s ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": ". If the book’s ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " changes, SwiftUI updates",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "only ",
+       "type": "text"
+      },
+      {
+       "code": "BookView",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", and not ",
+       "type": "text"
+      },
+      {
+       "code": "LibraryView",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", because only ",
+       "type": "text"
+      },
+      {
+       "code": "BookView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " reads the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " property.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryView: View {",
+      "    @State private var books = [Book(), Book(), Book()]",
+      "",
+      "    var body: some View {",
+      "        List(books) { book in ",
+      "            BookView(book: book)",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "struct BookView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        Text(book.title)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "If a view doesn’t have any dependencies, SwiftUI doesn’t update the view when",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "data changes. This approach allows an observable model data object to pass",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "through multiple layers of a view hierarchy without each intermediate view",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "forming a dependency.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "// Will not update when any property of `book` changes.",
+      "struct LibraryView: View {",
+      "    @State private var books = [Book(), Book(), Book()]",
+      "    ",
+      "    var body: some View {",
+      "        List(books) { book in ",
+      "            LibraryItemView(book: book)",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "// Will not update when any property of `book` changes.",
+      "struct LibraryItemView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        BookView(book: book)",
+      "    }",
+      "}",
+      "",
+      "// Will update when `book.title` changes.",
+      "struct BookView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        Text(book.title)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "However, a view that stores a reference to the observable object updates if the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "reference changes. This happens because the stored reference is part of the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "view’s value and not because the object is observable. For example, if the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "reference to book in the following code changes, SwiftUI updates the view:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct BookView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        // ...",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "A view can also form a dependency on an observable data model object accessed",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "through another object. For example, the view in the following code updates",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "when the author’s ",
+       "type": "text"
+      },
+      {
+       "code": "name",
+       "type": "codeVoice"
+      },
+      {
+       "text": " changes:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryItemView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        VStack(alignment: .leading) {",
+      "            Text(book.title)",
+      "            Text(\"Written by: \\(book.author.name)\")",
+      "                .font(.caption)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "anchor": "Create-the-source-of-truth-for-model-data",
+     "level": 3,
+     "text": "Create the source of truth for model data",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To create and store the source of truth for model data, declare a private",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "variable and initialize it with a instance of an observable data model type.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "Then add the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/State()",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "State()",
+       "_resolvedKey": "swiftui/state()"
+      },
+      {
+       "text": " macro to declare that SwiftUI manages the property. For example, the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "following code stores an instance of the data model type ",
+       "type": "text"
+      },
+      {
+       "code": "Book",
+       "type": "codeVoice"
+      },
+      {
+       "text": " in the state",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "variable ",
+       "type": "text"
+      },
+      {
+       "code": "book",
+       "type": "codeVoice"
+      },
+      {
+       "text": ":",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct BookView: View {",
+      "    @State private var book = Book()",
+      "    ",
+      "    var body: some View {",
+      "        Text(book.title)",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "By wrapping the book with ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/State()",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "State()",
+       "_resolvedKey": "swiftui/state()"
+      },
+      {
+       "text": ", you’re telling SwiftUI to manage the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "storage of the instance. Each time SwiftUI re-creates ",
+       "type": "text"
+      },
+      {
+       "code": "BookView",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", it connects",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the ",
+       "type": "text"
+      },
+      {
+       "code": "book",
+       "type": "codeVoice"
+      },
+      {
+       "text": " variable to the managed instance, providing the view a single source",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "of truth for the model data.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can also create a state object in your top-level ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/App",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "App",
+       "_resolvedKey": "swiftui/app"
+      },
+      {
+       "text": " instance or in one",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "of your app’s ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Scene",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Scene",
+       "_resolvedKey": "swiftui/scene"
+      },
+      {
+       "text": " instances. For example, the following code creates an",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "instance of ",
+       "type": "text"
+      },
+      {
+       "code": "Library",
+       "type": "codeVoice"
+      },
+      {
+       "text": " in the app’s top-level structure:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@main",
+      "struct BookReaderApp: App {",
+      "    @State private var library = Library()",
+      "    ",
+      "    var body: some Scene {",
+      "        WindowGroup {",
+      "            LibraryView()",
+      "                .environment(library)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "anchor": "Share-model-data-throughout-a-view-hierarchy",
+     "level": 3,
+     "text": "Share model data throughout a view hierarchy",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "If you have a data model object, like ",
+       "type": "text"
+      },
+      {
+       "code": "Library",
+       "type": "codeVoice"
+      },
+      {
+       "text": ", that you want to share",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "throughout your app, you can either:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "items": [
+      {
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "text": "pass the data model object to each view in the view hierarchy; or",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ]
+      },
+      {
+       "content": [
+        {
+         "inlineContent": [
+          {
+           "text": "add the data model object to the view’s environment",
+           "type": "text"
+          }
+         ],
+         "type": "paragraph"
+        }
+       ]
+      }
+     ],
+     "type": "unorderedList"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Passing model data to each view is convenient when you have a shallow view",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "hierarchy; for example, when a view doesn’t share the object with its subviews.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "However, you usually don’t know if a view needs to pass the object to",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "subviews, and you may not know if a subview deep inside the layers of the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "hierarchy needs the model data.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To share model data throughout a view hierarchy without needing to pass it to",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "each view, add the model data to the view’s environment. You can add the data",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "to the environment using either ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:_:)",
+       "_resolvedKey": "swiftui/view/environment(_:_:)"
+      },
+      {
+       "text": " or the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:)",
+       "_resolvedKey": "swiftui/view/environment(_:)"
+      },
+      {
+       "text": " modifier, passing in the model data.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "Before you can use the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:_:)",
+       "_resolvedKey": "swiftui/view/environment(_:_:)"
+      },
+      {
+       "text": " modifier, you need to create",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "a custom ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/EnvironmentKey",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "EnvironmentKey",
+       "_resolvedKey": "swiftui/environmentkey"
+      },
+      {
+       "text": ". Then extend ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/EnvironmentValues",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "EnvironmentValues",
+       "_resolvedKey": "swiftui/environmentvalues"
+      },
+      {
+       "text": " to include a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "custom environment property that gets and sets the value for the custom key.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "For instance, the following code creates an environment key and property for",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "library",
+       "type": "codeVoice"
+      },
+      {
+       "text": ":",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "extension EnvironmentValues {",
+      "    var library: Library {",
+      "        get { self[LibraryKey.self] }",
+      "        set { self[LibraryKey.self] = newValue }",
+      "    }",
+      "}",
+      "",
+      "private struct LibraryKey: EnvironmentKey {",
+      "    static let defaultValue: Library = Library()",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "With the custom environment key and property in place, a view can add model",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "data to its environment. For example, ",
+       "type": "text"
+      },
+      {
+       "code": "LibraryView",
+       "type": "codeVoice"
+      },
+      {
+       "text": " adds the source of truth",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "for a ",
+       "type": "text"
+      },
+      {
+       "code": "Library",
+       "type": "codeVoice"
+      },
+      {
+       "text": " instance to its environment using the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:_:)",
+       "_resolvedKey": "swiftui/view/environment(_:_:)"
+      },
+      {
+       "text": " modifier:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@main",
+      "struct BookReaderApp: App {",
+      "    @State private var library = Library()",
+      "    ",
+      "    var body: some Scene {",
+      "        WindowGroup {",
+      "            LibraryView()",
+      "                .environment(\\.library, library)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To retrieve the ",
+       "type": "text"
+      },
+      {
+       "code": "Library",
+       "type": "codeVoice"
+      },
+      {
+       "text": " instance from the environment, a view defines a local",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "variable that stores a reference to the instance, and then wraps the variable",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "with the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Environment",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Environment",
+       "_resolvedKey": "swiftui/environment"
+      },
+      {
+       "text": " property wrapper, passing in the key path to the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "custom environment value.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryView: View {",
+      "    @Environment(\\.library) private var library",
+      "",
+      "    var body: some View {",
+      "        // ...",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can also store model data directly in the environment without defining a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "custom environment value by using the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:)",
+       "_resolvedKey": "swiftui/view/environment(_:)"
+      },
+      {
+       "text": " modifier.",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "For instance, the following code adds a ",
+       "type": "text"
+      },
+      {
+       "code": "Library",
+       "type": "codeVoice"
+      },
+      {
+       "text": " instance to the environment",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "using this modifier:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@main",
+      "struct BookReaderApp: App {",
+      "    @State private var library = Library()",
+      "    ",
+      "    var body: some Scene {",
+      "        WindowGroup {",
+      "            LibraryView()",
+      "                .environment(library)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "To retrieve the instance from the environment, another view defines a local",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "variable to store the instance and wraps it with the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Environment",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Environment",
+       "_resolvedKey": "swiftui/environment"
+      },
+      {
+       "text": " property",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "wrapper. But instead of providing a key path to the environment value, you can",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "provide the model data type, as shown in the following code:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryView: View {",
+      "    @Environment(Library.self) private var library",
+      "    ",
+      "    var body: some View {",
+      "        // ...",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "By default, reading an object from the environment returns a non-optional",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "object when using the object type as the key. This default behavior assumes",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "that a view in the current hierarchy previously stored a non-optional instance",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "of the type using the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/environment(_:)",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "environment(_:)",
+       "_resolvedKey": "swiftui/view/environment(_:)"
+      },
+      {
+       "text": " modifier. If a view",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "attempts to retrieve an object using its type and that object isn’t in the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "environment, SwiftUI throws exception.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In cases where there is no guarantee that an object is in the environment,",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "retrieve an optional version of the object as shown in the following code. If",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the object isn’t available in the environment, SwiftUI returns ",
+       "type": "text"
+      },
+      {
+       "code": "nil",
+       "type": "codeVoice"
+      },
+      {
+       "text": " instead of",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "throwing an exception.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "@Environment(Library.self) private var library: Library?"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "anchor": "Change-model-data-in-a-view",
+     "level": 3,
+     "text": "Change model data in a view",
+     "type": "heading"
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "In most apps, people can change data that the app presents. When data changes,",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "any views that display the data should update to reflect the changed data. With",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "Observation in SwiftUI, a view can support data changes without using property",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "wrappers or bindings. For example, the following toggles the ",
+       "type": "text"
+      },
+      {
+       "code": "isAvailable",
+       "type": "codeVoice"
+      },
+      {
+       "text": "",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "property of a book in the action closure of a button:",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct BookView: View {",
+      "    var book: Book",
+      "    ",
+      "    var body: some View {",
+      "        List {",
+      "            Text(book.title)",
+      "            HStack {",
+      "                Text(book.isAvailable ? \"Available for checkout\" : \"Waiting for return\")",
+      "                Spacer()",
+      "                Button(book.isAvailable ? \"Check out\" : \"Return\") {",
+      "                    book.isAvailable.toggle()",
+      "                }",
+      "            }",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "However, there may be times when a view expects a binding before it can change",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the value of a mutable property. To provide a binding, wrap the model data with",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Bindable",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Bindable",
+       "_resolvedKey": "swiftui/bindable"
+      },
+      {
+       "text": " property wrapper. For example, the following code wraps the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "book",
+       "type": "codeVoice"
+      },
+      {
+       "text": " variable with ",
+       "type": "text"
+      },
+      {
+       "code": "@Bindable",
+       "type": "codeVoice"
+      },
+      {
+       "text": ". Then it uses a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/TextField",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "TextField",
+       "_resolvedKey": "swiftui/textfield"
+      },
+      {
+       "text": " to change the",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " property of a book, and a ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Toggle",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Toggle",
+       "_resolvedKey": "swiftui/toggle"
+      },
+      {
+       "text": " to change the ",
+       "type": "text"
+      },
+      {
+       "code": "isAvailable",
+       "type": "codeVoice"
+      },
+      {
+       "text": "",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "property, using the ",
+       "type": "text"
+      },
+      {
+       "code": "$",
+       "type": "codeVoice"
+      },
+      {
+       "text": " syntax to pass a binding to each property.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct BookEditView: View {",
+      "    @Bindable var book: Book",
+      "    @Environment(\\.dismiss) private var dismiss",
+      "    ",
+      "    var body: some View {",
+      "        VStack() {",
+      "            HStack {",
+      "                Text(\"Title\")",
+      "                TextField(\"Title\", text: $book.title)",
+      "                    .textFieldStyle(.roundedBorder)",
+      "                    .onSubmit {",
+      "                        dismiss()",
+      "                    }",
+      "            }",
+      "            ",
+      "            Toggle(isOn: $book.isAvailable) {",
+      "                Text(\"Book is available\")",
+      "            }",
+      "            ",
+      "            Button(\"Close\") {",
+      "                dismiss()",
+      "            }",
+      "            .buttonStyle(.borderedProminent)",
+      "        }",
+      "        .padding()",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "You can use the ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Bindable",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Bindable",
+       "_resolvedKey": "swiftui/bindable"
+      },
+      {
+       "text": " property wrapper on properties and variables to an",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Observation/Observable",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "Observable",
+       "_resolvedKey": "observation/observable"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "object. This includes global variables, properties that exist outside of",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "SwiftUI types, or even local variables. For example, you can create a",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "code": "@Bindable",
+       "type": "codeVoice"
+      },
+      {
+       "text": " variable within a view’s ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/View/body-8kl5o",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "body",
+       "_resolvedKey": "swiftui/view/body-8kl5o"
+      },
+      {
+       "text": ":",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    },
+    {
+     "code": [
+      "struct LibraryView: View {",
+      "    @State private var books = [Book(), Book(), Book()]",
+      "",
+      "    var body: some View {",
+      "        List(books) { book in ",
+      "            @Bindable var book = book",
+      "            TextField(\"Title\", text: $book.title)",
+      "        }",
+      "    }",
+      "}"
+     ],
+     "copyToClipboard": true,
+     "lineAnnotations": [],
+     "showLineNumbers": false,
+     "syntax": "swift",
+     "type": "codeListing",
+     "wrap": 0
+    },
+    {
+     "inlineContent": [
+      {
+       "text": "The ",
+       "type": "text"
+      },
+      {
+       "code": "@Bindable",
+       "type": "codeVoice"
+      },
+      {
+       "text": " variable ",
+       "type": "text"
+      },
+      {
+       "code": "book",
+       "type": "codeVoice"
+      },
+      {
+       "text": " provides a binding that connects ",
+       "type": "text"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/TextField",
+       "isActive": true,
+       "type": "reference",
+       "_resolvedTitle": "TextField",
+       "_resolvedKey": "swiftui/textfield"
+      },
+      {
+       "text": " to",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the ",
+       "type": "text"
+      },
+      {
+       "code": "title",
+       "type": "codeVoice"
+      },
+      {
+       "text": " property of a book so that a person can make changes directly to",
+       "type": "text"
+      },
+      {
+       "text": " ",
+       "type": "text"
+      },
+      {
+       "text": "the model data.",
+       "type": "text"
+      }
+     ],
+     "type": "paragraph"
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Creating model data\nMigrating from the Observable Object protocol to the Observable macro\nObservable()\nMonitoring data changes in your app\nStateObject\nObservedObject\nObservableObject",
+   "contentJson": [
+    {
+     "title": "Creating model data",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Migrating-from-the-observable-object-protocol-to-the-observable-macro",
+       "key": "swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro",
+       "title": "Migrating from the Observable Object protocol to the Observable macro"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Observation/Observable()",
+       "key": "observation/observable()",
+       "title": "Observable()"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/Monitoring-model-data-changes-in-your-app",
+       "key": "swiftui/monitoring-model-data-changes-in-your-app",
+       "title": "Monitoring data changes in your app"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/StateObject",
+       "key": "swiftui/stateobject",
+       "title": "StateObject"
+      },
+      {
+       "identifier": "doc://com.apple.SwiftUI/documentation/SwiftUI/ObservedObject",
+       "key": "swiftui/observedobject",
+       "title": "ObservedObject"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Combine/ObservableObject",
+       "key": "combine/observableobject",
+       "title": "ObservableObject"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 5
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "observation/observable()",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "swiftui/monitoring-model-data-changes-in-your-app",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "swiftui/stateobject",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "swiftui/observedobject",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "swiftui/managing-model-data-in-your-app",
+   "toKey": "combine/observableobject",
+   "relationType": "see_also",
+   "section": "Creating model data",
+   "sortOrder": 5
+  }
+ ]
+}

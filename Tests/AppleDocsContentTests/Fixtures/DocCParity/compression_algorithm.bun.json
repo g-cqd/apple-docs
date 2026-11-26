@@ -1,0 +1,313 @@
+{
+ "document": {
+  "sourceType": "apple-docc",
+  "key": "compression/algorithm",
+  "title": "Algorithm",
+  "kind": "enum",
+  "role": "symbol",
+  "roleHeading": "Enumeration",
+  "framework": "compression",
+  "url": "https://developer.apple.com/documentation/compression/algorithm",
+  "language": "swift",
+  "abstractText": "Algorithms used for compression or decompression.",
+  "declarationText": "enum Algorithm",
+  "platformsJson": "{\"ios\":\"13.0\",\"ipados\":\"13.0\",\"maccatalyst\":\"13.0\",\"macos\":\"10.15\",\"tvos\":\"13.0\",\"watchos\":\"6.0\"}",
+  "minIos": "13.0",
+  "minMacos": "10.15",
+  "minWatchos": "6.0",
+  "minTvos": "13.0",
+  "minVisionos": null,
+  "isDeprecated": false,
+  "isBeta": false,
+  "isReleaseNotes": false,
+  "urlDepth": 1,
+  "headings": null,
+  "sourceMetadata": null
+ },
+ "sections": [
+  {
+   "sectionKind": "abstract",
+   "heading": null,
+   "contentText": "Algorithms used for compression or decompression.",
+   "contentJson": [
+    {
+     "text": "Algorithms used for compression or decompression.",
+     "type": "text"
+    }
+   ],
+   "sortOrder": 0
+  },
+  {
+   "sectionKind": "declaration",
+   "heading": "Declaration",
+   "contentText": "enum Algorithm",
+   "contentJson": [
+    {
+     "languages": [
+      "swift"
+     ],
+     "platforms": [
+      "iOS",
+      "iPadOS",
+      "Mac Catalyst",
+      "macOS",
+      "tvOS",
+      "visionOS",
+      "watchOS"
+     ],
+     "tokens": [
+      {
+       "kind": "keyword",
+       "text": "enum"
+      },
+      {
+       "kind": "text",
+       "text": " "
+      },
+      {
+       "kind": "identifier",
+       "text": "Algorithm"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 1
+  },
+  {
+   "sectionKind": "topics",
+   "heading": "Topics",
+   "contentText": "Enumeration Cases\nAlgorithm.brotli\nAlgorithm.lz4\nAlgorithm.lzbitmap\nAlgorithm.lzfse\nAlgorithm.lzma\nAlgorithm.zlib",
+   "contentJson": [
+    {
+     "title": "Enumeration Cases",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/brotli",
+       "key": "compression/algorithm/brotli",
+       "title": "Algorithm.brotli"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/lz4",
+       "key": "compression/algorithm/lz4",
+       "title": "Algorithm.lz4"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/lzbitmap",
+       "key": "compression/algorithm/lzbitmap",
+       "title": "Algorithm.lzbitmap"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/lzfse",
+       "key": "compression/algorithm/lzfse",
+       "title": "Algorithm.lzfse"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/lzma",
+       "key": "compression/algorithm/lzma",
+       "title": "Algorithm.lzma"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/Algorithm/zlib",
+       "key": "compression/algorithm/zlib",
+       "title": "Algorithm.zlib"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 4
+  },
+  {
+   "sectionKind": "relationships",
+   "heading": "Relationships",
+   "contentText": "Conforms To\nCaseIterable\nEquatable\nHashable\nRawRepresentable",
+   "contentJson": [
+    {
+     "title": "Conforms To",
+     "type": "conformsTo",
+     "items": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/CaseIterable",
+       "key": "swift/caseiterable",
+       "title": "CaseIterable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Equatable",
+       "key": "swift/equatable",
+       "title": "Equatable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/Hashable",
+       "key": "swift/hashable",
+       "title": "Hashable"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Swift/RawRepresentable",
+       "key": "swift/rawrepresentable",
+       "title": "RawRepresentable"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 5
+  },
+  {
+   "sectionKind": "see_also",
+   "heading": "See Also",
+   "contentText": "Objects that simplify multiple-step compression\nCompressing and decompressing data with input and output filters\nCompressing and decompressing files with stream compression\nInputFilter\nOutputFilter\nFilterError\nFilterOperation",
+   "contentJson": [
+    {
+     "title": "Objects that simplify multiple-step compression",
+     "type": null,
+     "items": [
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Accelerate/compressing-and-decompressing-data-with-input-and-output-filters",
+       "key": "accelerate/compressing-and-decompressing-data-with-input-and-output-filters",
+       "title": "Compressing and decompressing data with input and output filters"
+      },
+      {
+       "identifier": "doc://com.apple.documentation/documentation/Accelerate/compressing-and-decompressing-files-with-stream-compression",
+       "key": "accelerate/compressing-and-decompressing-files-with-stream-compression",
+       "title": "Compressing and decompressing files with stream compression"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/InputFilter",
+       "key": "compression/inputfilter",
+       "title": "InputFilter"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/OutputFilter",
+       "key": "compression/outputfilter",
+       "title": "OutputFilter"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/FilterError",
+       "key": "compression/filtererror",
+       "title": "FilterError"
+      },
+      {
+       "identifier": "doc://com.apple.compression/documentation/Compression/FilterOperation",
+       "key": "compression/filteroperation",
+       "title": "FilterOperation"
+      }
+     ]
+    }
+   ],
+   "sortOrder": 6
+  }
+ ],
+ "relationships": [
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/brotli",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 0
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/lz4",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 1
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/lzbitmap",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 2
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/lzfse",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 3
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/lzma",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 4
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/algorithm/zlib",
+   "relationType": "child",
+   "section": "Enumeration Cases",
+   "sortOrder": 5
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "swift/caseiterable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 6
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "swift/equatable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 7
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "swift/hashable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 8
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "swift/rawrepresentable",
+   "relationType": "conforms_to",
+   "section": "Conforms To",
+   "sortOrder": 9
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "accelerate/compressing-and-decompressing-data-with-input-and-output-filters",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 10
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "accelerate/compressing-and-decompressing-files-with-stream-compression",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 11
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/inputfilter",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 12
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/outputfilter",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 13
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/filtererror",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 14
+  },
+  {
+   "fromKey": "compression/algorithm",
+   "toKey": "compression/filteroperation",
+   "relationType": "see_also",
+   "section": "Objects that simplify multiple-step compression",
+   "sortOrder": 15
+  }
+ ]
+}
