@@ -1,30 +1,25 @@
 public import AemiJSONCore
 public import AemiJSONRPC
+import AppleDocsCommands
 import AppleDocsCore
-import AppleDocsStorage
 import OrderedCollections
 
 /// Cross-platform MCP server dispatcher handling JSON-RPC 2.0 requests (`initialize`, `ping`,
-/// `tools/list`, `tools/call`) against a pooled read-only ``SQLiteReaderPool``.
-///
-/// Transport-agnostic: drives both `stdio` (via ``MCPStdioTransport``) and Streamable HTTP
-/// (via ``MCPHTTPResponder`` on `g-cqd/HTTP`).
+/// `tools/list`, `tools/call`) against a pooled read-only ``CorpusReaderHandle``.
 public final class MCPServerDispatcher: Sendable {
     /// Supported MCP protocol version advertised during `initialize`.
     public static let protocolVersion = "2025-03-26"
 
-    let pool: SQLiteReaderPool
-    let databasePath: String
+    let reader: CorpusReaderHandle
 
     /// Creates a dispatcher backed by `databasePath` with a bounded reader pool.
     public init(databasePath: String, maxReaders: Int = 4) {
-        self.databasePath = databasePath
-        self.pool = SQLiteReaderPool(path: databasePath, maxReaders: maxReaders)
+        self.reader = CorpusReaderHandle(databasePath: databasePath, maxReaders: maxReaders)
     }
 
     /// Closes pooled SQLite readers cleanly on shutdown.
     public func close() async {
-        await pool.close()
+        await reader.close()
     }
 
     /// Evaluates one raw JSON-RPC 2.0 payload byte array and returns encoded response bytes
@@ -74,9 +69,7 @@ public final class MCPServerDispatcher: Sendable {
     private func initializeResult() -> JSONValue {
         .object([
             "protocolVersion": .string(Self.protocolVersion),
-            "capabilities": .object([
-                "tools": .object(["listChanged": .bool(false)])
-            ]),
+            "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
             "serverInfo": .object([
                 "name": .string("apple-docs"),
                 "version": .string(AppleDocsVersion.current)

@@ -136,7 +136,8 @@ let package = Package(
             name: "AppleDocsCommands",
             dependencies: [
                 "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput", "AppleDocsPipeline",
-                "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsStorage"
+                "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsStorage",
+                .product(name: "AemiHTTP", package: "HTTP")
             ],
             path: "Sources/AppleDocsCommands",
             swiftSettings: strictSettings
@@ -223,6 +224,15 @@ let package = Package(
                 "AppleDocsSetupDarwin", "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSetupTests",
+            swiftSettings: strictSettings
+        ),
+        .testTarget(
+            name: "AppleDocsWebTests",
+            dependencies: [
+                "AppleDocsCore", "AppleDocsStorage", "AppleDocsWeb", "AppleDocsTestSupport",
+                .product(name: "AemiHTTP", package: "HTTP")
+            ],
+            path: "Tests/AppleDocsWebTests",
             swiftSettings: strictSettings
         )
     ]

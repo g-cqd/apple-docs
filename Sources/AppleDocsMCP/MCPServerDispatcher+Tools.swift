@@ -74,22 +74,16 @@ extension MCPServerDispatcher {
         let frameworkArg = args["framework"].string
         let maxChars = args["maxChars"].int
         let page = args["page"].int ?? 1
-        let dbPath = databasePath
-
-        let detail: PublicDocumentDetail? =
-            try await Task.detached {
-                let store = try CorpusStore(path: dbPath, options: .readOnly)
-                defer { store.close() }
-                if let pathArg {
-                    let key = try DocumentKey(pathArg)
-                    return try CorpusQueryService.readDocument(key: key, on: store)
-                }
-                if let symbolArg {
-                    return try CorpusQueryService.readSymbol(named: symbolArg, framework: frameworkArg, on: store)
-                }
-                throw JSONRPCError(code: JSONRPCError.invalidParams, message: "read_doc requires 'path' or 'symbol'.")
+        let detail: PublicDocumentDetail? = try await reader.withStore { store in
+            if let pathArg {
+                let key = try DocumentKey(pathArg)
+                return try CorpusQueryService.readDocument(key: key, on: store)
             }
-            .value
+            if let symbolArg {
+                return try CorpusQueryService.readSymbol(named: symbolArg, framework: frameworkArg, on: store)
+            }
+            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "read_doc requires 'path' or 'symbol'.")
+        }
 
         guard let detail else {
             throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Document not found.")
@@ -104,14 +98,9 @@ extension MCPServerDispatcher {
 
     private func invokeListFrameworks(_ args: JSON) async throws -> String {
         let kind = args["kind"].string
-        let dbPath = databasePath
-        let items =
-            try await Task.detached {
-                let store = try CorpusStore(path: dbPath, options: .readOnly)
-                defer { store.close() }
-                return try CorpusQueryService.listFrameworks(kind: kind, on: store)
-            }
-            .value
+        let items = try await reader.withStore { store in
+            try CorpusQueryService.listFrameworks(kind: kind, on: store)
+        }
         return try PublicProjection.encodeJSON(items)
     }
 
@@ -160,7 +149,7 @@ extension MCPServerDispatcher {
     private func encodeFromPool<T: Encodable & Sendable>(
         _ query: @escaping @Sendable (SQLiteConnection) throws -> T
     ) async throws -> String {
-        let value = try await pool.withConnection(query)
+        let value = try await reader.withConnection(query)
         return try PublicProjection.encodeJSON(value)
     }
 }
