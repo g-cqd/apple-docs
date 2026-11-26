@@ -62,6 +62,31 @@ with the binary. `publish` produces the archives, a SwiftPM artifact bundle, a C
 filled release note. Notarization runs in CI from the `NOTARY_*` secrets and fails closed on tags without them; it
 was not submitted from this dry run.
 
+## Sanitizers
+
+Linux AddressSanitizer runs with swift-ci's leak suppressions only. LeakSanitizer (Swift 6.4.3, Linux, x86_64 and
+arm64) reports recursive enum values that are reachable only from a global, although their retains and releases
+balance. This program reports one value's size, while building and freeing the same value 1,000 times in a function
+reports nothing:
+
+```swift
+import OrderedCollections
+enum Node { case int(Int64), array([Node]), object(OrderedDictionary<String, Node>) }
+func make(_ depth: Int) -> Node {
+    if depth == 0 { return .int(1) }
+    var members = OrderedDictionary<String, Node>()
+    members["key\(depth)"] = make(depth - 1)
+    members["other"] = .array([.int(2), make(depth - 1)])
+    return .object(members)
+}
+let held: [Node] = [make(3)]  // reported as leaked at exit
+print(held.count)
+```
+
+Process-lifetime globals therefore keep such values serialized (`MCPToolDescriptor` stores its schemas as JSON text
+and materializes them per `tools/list`) instead of suppressing the report. Revisit when a toolchain stops reporting
+the program above.
+
 ## Other gates
 
 `Scripts/dependency-audit.sh` (declared vs imported target dependencies), `Scripts/check-layers.py` (ADR-0001
