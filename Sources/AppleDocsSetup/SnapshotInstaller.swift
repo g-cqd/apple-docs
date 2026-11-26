@@ -37,29 +37,24 @@ public enum SnapshotInstaller: Sendable {
 
         let fm = FileManager.default
         let destURL = URL(fileURLWithPath: destinationDirectory, isDirectory: true)
-        let stageURL = destURL.appendingPathComponent(".staging-\(UUID().uuidString)", isDirectory: true)
-        do {
-            try fm.createDirectory(at: stageURL, withIntermediateDirectories: true)
-        } catch {
-            throw .ioFailure("Unable to prepare staging directory under \(destinationDirectory): \(error)")
-        }
-        defer { try? fm.removeItem(at: stageURL) }
+        try await SetupScratchDirectory.withDirectory(prefix: ".staging", under: destURL) {
+            stageURL throws(SetupError) in
+            let extractArgs = tarArguments(for: archivePath, extractTo: stageURL.path)
+            _ = try await ScrubbedSubprocess.runChecked(executable: "tar", arguments: extractArgs)
 
-        let extractArgs = tarArguments(for: archivePath, extractTo: stageURL.path)
-        _ = try await ScrubbedSubprocess.runChecked(executable: "tar", arguments: extractArgs)
-
-        do {
-            let entries = try fm.contentsOfDirectory(at: stageURL, includingPropertiesForKeys: nil)
-            for staged in entries {
-                let finalURL = destURL.appendingPathComponent(staged.lastPathComponent)
-                if fm.fileExists(atPath: finalURL.path) {
-                    _ = try fm.replaceItemAt(finalURL, withItemAt: staged)
-                } else {
-                    try fm.moveItem(at: staged, to: finalURL)
+            do {
+                let entries = try fm.contentsOfDirectory(at: stageURL, includingPropertiesForKeys: nil)
+                for staged in entries {
+                    let finalURL = destURL.appendingPathComponent(staged.lastPathComponent)
+                    if fm.fileExists(atPath: finalURL.path) {
+                        _ = try fm.replaceItemAt(finalURL, withItemAt: staged)
+                    } else {
+                        try fm.moveItem(at: staged, to: finalURL)
+                    }
                 }
+            } catch {
+                throw .ioFailure("Failed promoting staged snapshot files: \(error)")
             }
-        } catch {
-            throw .ioFailure("Failed promoting staged snapshot files: \(error)")
         }
         try syncDirectory(atPath: destURL.path)
     }

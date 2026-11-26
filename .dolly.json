@@ -1,0 +1,5 @@
+{
+  "exclude": [
+    "Sources/apple-docs/**"
+  ]
+}

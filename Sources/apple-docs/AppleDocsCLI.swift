@@ -18,6 +18,8 @@ struct AppleDocsCLI: AsyncParsableCommand {
             SymbolsSubcommand.self,
             FontsSubcommand.self,
             ImportV31Subcommand.self,
+            SnapshotSubcommand.self,
+            SetupSubcommand.self,
             MCPSubcommand.self,
             WebSubcommand.self
         ]
