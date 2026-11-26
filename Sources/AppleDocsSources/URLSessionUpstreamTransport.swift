@@ -20,7 +20,7 @@ public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.httpMaximumConnectionsPerHost = max(1, min(maxConnectionsPerHost, 64))
+        configuration.httpMaximumConnectionsPerHost = max(1, min(maxConnectionsPerHost, 256))
         configuration.timeoutIntervalForRequest = 30
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false

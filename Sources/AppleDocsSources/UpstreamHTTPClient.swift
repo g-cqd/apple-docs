@@ -10,17 +10,24 @@ public final class UpstreamHTTPClient: Sendable {
         public let maxBodyBytes: Int
         public let allowedHosts: Set<String>?
         public let sleepBeforeRetry: @Sendable (Int) async -> Void
+        /// Shared token bucket every attempt waits on (`nil`: unlimited).
+        public let rateLimiter: RequestRateLimiter?
 
         public init(
             maxAttempts: Int = 3,
             maxBodyBytes: Int = 16_777_216,
             allowedHosts: Set<String>? = nil,
+            requestsPerSecond: Double? = nil,
+            burst: Int? = nil,
             sleepBeforeRetry: @escaping @Sendable (Int) async -> Void = { _ in }
         ) {
             self.maxAttempts = max(1, min(maxAttempts, 8))
             self.maxBodyBytes = max(1_024, maxBodyBytes)
             self.allowedHosts = allowedHosts
             self.sleepBeforeRetry = sleepBeforeRetry
+            self.rateLimiter = requestsPerSecond.map { rate in
+                RequestRateLimiter(requestsPerSecond: rate, burst: burst ?? max(1, Int(rate)))
+            }
         }
     }
 
@@ -70,6 +77,7 @@ public final class UpstreamHTTPClient: Sendable {
         var lastStatus: Int?
         for attempt in 1 ... policy.maxAttempts {
             let response: UpstreamFetchResponse
+            await policy.rateLimiter?.acquire()
             do {
                 response = try await transport.fetch(request)
             } catch .networkFailure {

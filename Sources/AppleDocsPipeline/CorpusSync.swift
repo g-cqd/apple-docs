@@ -99,7 +99,7 @@ public enum CorpusSync {
             roots: roots.filter { $0.sourceType == .appleDocC },
             client: client,
             store: store,
-            concurrency: min(16, options.concurrency)
+            concurrency: options.concurrency
         )
         report.rootsUnchanged = gate.unchanged.count
         report.pagesSeededFromIndex = gate.seededPages

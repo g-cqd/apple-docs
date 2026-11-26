@@ -42,6 +42,15 @@ Run one with `Fuzz/run.sh <Harness> [seconds]`, all with `Fuzz/ci.sh` (nightly i
   with the previous commit on every push touching `Sources/`. Run: `swift package --package-path Benchmarks benchmark`.
 - `Benchmarks/compare-bun-sync.sh <framework> <runs> <concurrency>`: cold crawl of one framework, both
   implementations, alternating order.
+- Full-corpus sync (421 roots, 389,769 tracked pages, 100 in-flight requests, 500 requests/s token bucket,
+  revalidating the whole DocC + HIG corpus against `developer.apple.com`):
+  - Full revalidation sweep (every page 200 after an upstream ETag rotation): Swift **938.3 s** wall (496.2 s user,
+    165.7 s sys, **888 MiB** max RSS, **288 MiB** peak memory footprint, 381,894 pages rewritten, 3.58 GiB DB) vs
+    Bun **824.3 s** wall (173.1 s user, 211.8 s sys, **1,004 MiB** max RSS, **622 MiB** peak memory footprint,
+    371,606 pages rewritten, 3.48 GiB DB).
+  - Warm no-change sync (index ETag gate active, 412 roots skipped via 304 + 173 pages checked under roots without an
+    index): Swift **~8–23 s** wall (**106 MiB** max RSS, **30 MiB** peak memory footprint) vs Bun **9.0 s** wall
+    (**456 MiB** max RSS, **243 MiB** peak memory footprint).
 - `Benchmarks/compare-bun-mcp.py --bun … --swift … [--db corpus.db]`: per-call MCP latency (p50/p90/p99),
   interleaved between the servers, for repeated (cache-hitting) and, with `--db`, cold sampled calls, plus RSS.
   Cold latency is dominated by OS page-cache residency of each database file, so give Bun a fresh copy of its

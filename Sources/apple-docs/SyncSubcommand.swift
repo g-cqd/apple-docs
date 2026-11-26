@@ -42,7 +42,10 @@ struct SyncSubcommand: AsyncParsableCommand {
     var maxDepth: Int?
 
     @Option(name: .long, help: "Concurrent in-flight HTTP requests (1-256).")
-    var concurrency = 32
+    var concurrency = 100
+
+    @Option(name: .long, help: "Maximum requests per second (token bucket; 0 for unlimited).")
+    var rate = 500.0
 
     @Option(name: .long, help: "Target Swift v1 corpus database path.")
     var db: String?
@@ -74,7 +77,7 @@ struct SyncSubcommand: AsyncParsableCommand {
 
     private func syncCorpus(kinds: [SourceKind], store: CorpusStore) async throws {
         let report = try await CorpusSync.run(
-            client: UpstreamHTTPClient(),
+            client: client(),
             store: store,
             options: CorpusSync.Options(
                 sources: kinds.isEmpty ? [.appleDocC, .hig] : Set(kinds),
@@ -104,6 +107,19 @@ struct SyncSubcommand: AsyncParsableCommand {
         )
     }
 
+    /// The upstream client, paced by `--rate` (Bun's sync defaults: 100 in flight, 500 requests/s), with one HTTP
+    /// connection per in-flight request.
+    private func client() -> UpstreamHTTPClient {
+        // developer.apple.com serves HTTP/1.1, so in-flight requests need one connection each.
+        UpstreamHTTPClient(
+            transport: URLSessionUpstreamTransport(maxConnectionsPerHost: concurrency),
+            policy: UpstreamHTTPClient.Policy(
+                requestsPerSecond: rate > 0 ? rate : nil,
+                burst: rate > 0 ? Int(rate) : nil
+            )
+        )
+    }
+
     /// The semantic model when installed (`apple-docs setup`), else `nil` with a note: search stays lexical.
     private func embeddingStage() -> CorpusSync.EmbeddingStage? {
         guard embeddings else { return nil }
@@ -119,7 +135,7 @@ struct SyncSubcommand: AsyncParsableCommand {
         let report = try await SyncOrchestrator.sync(
             adapter: SourceRegistry.adapter(for: kind),
             seeds: try seed.map { try DocumentKey($0) },
-            client: UpstreamHTTPClient(),
+            client: client(),
             into: store,
             options: SyncOrchestrator.Options(
                 maxPages: maxPages ?? 50,
