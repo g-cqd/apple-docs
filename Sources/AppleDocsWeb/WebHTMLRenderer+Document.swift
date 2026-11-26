@@ -9,6 +9,7 @@ extension WebHTMLRenderer {
         var groups = WebLinkGroups(view.related)
         if let detail = view.detail {
             parts.append(contentsOf: header(detail, frameworkName: view.frameworkName))
+            parts.append(declarationBlock(view.declarations, fallback: detail.document.declaration))
             for section in view.sections {
                 parts.append(render(section, groups: &groups))
             }
@@ -62,7 +63,7 @@ extension WebHTMLRenderer {
             let title = group.title.map { "<h3>\(escapeHTML($0))</h3>" } ?? ""
             let items = group.items.map { item in
                 item.isAvailable
-                    ? "<li><a href=\"/doc/\(escapeHTML(item.path))\">\(escapeHTML(item.title))</a></li>"
+                    ? "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(item.path)))\">\(escapeHTML(item.title))</a></li>"
                     : "<li>\(escapeHTML(item.title))</li>"
             }
             return "\(title)<ul class=\"link-list\">\(items.joined())</ul>"
@@ -79,7 +80,7 @@ extension WebHTMLRenderer {
         }
         crumbs.append((view.frameworkName, "/doc/\(segments[0])"))
         for index in 1 ..< (segments.count - 1) {
-            crumbs.append((segments[index], "/doc/" + segments[0 ... index].joined(separator: "/")))
+            crumbs.append((segments[index], "/doc/" + WebDocPath.safeKey(segments[0 ... index].joined(separator: "/"))))
         }
         crumbs.append((view.title, nil))
         return crumbs
@@ -95,9 +96,33 @@ extension WebHTMLRenderer {
         if let abstract = document.abstract, !abstract.isEmpty {
             parts.append("<p class=\"abstract\">\(WebMarkdownBlockRenderer.renderInline(abstract))</p>")
         }
-        if let declaration = document.declaration, !declaration.isEmpty {
-            parts.append("<pre><code class=\"language-swift\">\(escapeHTML(declaration))</code></pre>")
-        }
         return parts
+    }
+
+    /// The declaration: one code block, or per-language variants behind a Swift / ObjC toggle (Bun markup).
+    static func declarationBlock(_ variants: [WebDeclaration], fallback: String?) -> String {
+        func code(_ text: String, _ language: String) -> String {
+            "<pre><code class=\"language-\(escapeHTML(language))\">\(escapeHTML(text))</code></pre>"
+        }
+        guard variants.count > 1 else {
+            if let only = variants.first { return code(only.code, only.language) }
+            guard let fallback, !fallback.isEmpty else { return "" }
+            return code(fallback, "swift")
+        }
+        let buttons = variants.enumerated()
+            .map { index, variant in
+                let label = variant.language == "occ" || variant.language == "objc" ? "ObjC" : "Swift"
+                let active = index == 0
+                return "<button type=\"button\" class=\"lang-btn\(active ? " active" : "")\" "
+                    + "data-lang=\"\(escapeHTML(variant.language))\" aria-pressed=\"\(active)\">\(label)</button>"
+            }
+        let blocks = variants.enumerated()
+            .map { index, variant in
+                "<div class=\"decl-variant\" data-lang=\"\(escapeHTML(variant.language))\"\(index == 0 ? "" : " hidden")>"
+                    + code(variant.code, variant.language) + "</div>"
+            }
+        let languages = variants.map { escapeHTML($0.language) }.joined(separator: ",")
+        return "<div class=\"lang-toggle\" role=\"group\" aria-label=\"Language\">\(buttons.joined())</div>"
+            + "<section id=\"declaration\" data-languages=\"\(languages)\">\(blocks.joined())</section>"
     }
 }

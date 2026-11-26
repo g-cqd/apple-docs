@@ -15,10 +15,15 @@ extension StaticSiteBuilder {
     ) throws {
         let base = options.site.baseURL
         func write(_ text: String, _ path: String) throws { try output.write(Array(text.utf8), to: path) }
+        func page(_ html: String, _ path: String) throws { try output.writeHTML(html, to: path) }
 
-        try write(WebHTMLRenderer.renderIndexPage(frameworks: plan.frameworks), "index.html")
-        try write(WebHTMLRenderer.renderNotFoundPage(path: "this address"), "404.html")
-        try write(WebHTMLRenderer.renderSearchPage(query: "", results: []), "search/index.html")
+        try page(WebHTMLRenderer.renderIndexPage(frameworks: plan.frameworks), "index.html")
+        try page(WebHTMLRenderer.renderNotFoundPage(path: "this address"), "404.html")
+        try page(WebHTMLRenderer.renderStaticSearchPage(indexPath: "/search/title-index.json"), "search/index.html")
+        try write(
+            try StaticSearchIndex.build(keys: exportedKeys, databasePath: databasePath),
+            "search/title-index.json"
+        )
         for (name, asset) in WebAssetCatalog.assets { try output.write(asset.bytes, to: "assets/\(name)") }
         try write("User-agent: *\nAllow: /\nSitemap: \(base)/sitemap.xml\n", "robots.txt")
         try write("Contact: https://github.com/g-cqd/apple-docs/security/advisories\n", ".well-known/security.txt")
@@ -35,7 +40,7 @@ extension StaticSiteBuilder {
             "sitemaps/\(WebSitemap.rootSitemapSlug).xml"
         )
         for slug in slugs {
-            let paths = (byFramework[slug] ?? []).map { "/doc/\($0)" }
+            let paths = (byFramework[slug] ?? []).map { "/doc/\(WebDocPath.safeKey($0))" }
             try write(WebSitemap.urlSetXML(baseURL: base, paths: paths), "sitemaps/\(slug).xml")
         }
         try writeAssetPages(databasePath: databasePath, output: output, resourcesDirectory: options.resourcesDirectory)
@@ -66,7 +71,7 @@ extension StaticSiteBuilder {
             rendered.append(symbol)
         }
         let symbolsPage = WebHTMLRenderer.renderSymbolsPage(query: "", scope: "public", symbols: rendered)
-        try output.write(Array(symbolsPage.utf8), to: "symbols/index.html")
-        try output.write(Array(WebHTMLRenderer.renderFontsPage(families: families).utf8), to: "fonts/index.html")
+        try output.writeHTML(symbolsPage, to: "symbols/index.html")
+        try output.writeHTML(WebHTMLRenderer.renderFontsPage(families: families), to: "fonts/index.html")
     }
 }

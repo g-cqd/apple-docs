@@ -9,6 +9,8 @@ public struct WebDocumentView: Sendable {
     public let key: DocumentKey
     public let detail: PublicDocumentDetail?
     public let sections: [WebDocumentSection]
+    /// Declaration variants by language (more than one enables the Swift / Objective-C toggle).
+    public let declarations: [WebDeclaration]
     public let framework: PublicFrameworkSummary?
     public let related: [PublicRelatedDocument]
     public let children: [PublicDocumentSummary]
@@ -49,6 +51,7 @@ public struct WebDocumentView: Sendable {
             detail: document.map { PublicDocumentDetail(document: $0, sections: records) },
             sections: records.filter { !PublicDocumentDetail.metadataSectionKinds.contains($0.sectionKind) }
                 .map(WebDocumentSection.init),
+            declarations: WebDeclaration.variants(in: records),
             framework: framework,
             related: related,
             children: children.filter { !linked.contains($0.path) },

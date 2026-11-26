@@ -68,7 +68,11 @@ public enum StaticSiteBuilder: Sendable {
         outputDirectory: String,
         options: Options = Options()
     ) async throws -> BuildReport {
-        let output = try StaticSiteOutput(outputDirectory: outputDirectory, markerFileName: markerFileName)
+        let output = try StaticSiteOutput(
+            outputDirectory: outputDirectory,
+            markerFileName: markerFileName,
+            site: options.site
+        )
         do {
             let report = try await populate(output, databasePath: databasePath, options: options)
             try output.commit()

@@ -48,6 +48,7 @@ let package = Package(
         .package(url: "https://github.com/g-cqd/HTTP.git", revision: "4d56dd0468f8087876bc5f33815858b6f42a5fbb"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.8.2")),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "5.2.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.8.1"),
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", .upToNextMinor(from: "1.0.2"))
     ],
@@ -172,7 +173,8 @@ let package = Package(
             dependencies: [
                 "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
                 "AppleDocsSearch", "AppleDocsStorage",
-                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON")
+                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "Crypto", package: "swift-crypto")
             ],
             path: "Sources/AppleDocsWeb",
             resources: [.process("Resources")],

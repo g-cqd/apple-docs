@@ -35,7 +35,8 @@ extension WebHTMLRenderer {
                 let items = results.map { result in
                     let doc = result.document
                     let abstract = doc.abstract.map { "<p>\(WebMarkdownBlockRenderer.renderInline($0))</p>" } ?? ""
-                    return "<li><a href=\"/doc/\(escapeHTML(doc.path))\">\(escapeHTML(doc.title))</a>"
+                    return
+                        "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(doc.path)))\">\(escapeHTML(doc.title))</a>"
                         + "<span class=\"badge\">\(escapeHTML(doc.framework))</span>\(abstract)</li>"
                 }
                 body += "<ul class=\"results\">\(items.joined())</ul>"
@@ -43,6 +44,15 @@ extension WebHTMLRenderer {
         }
         let title = query.isEmpty ? "Search — apple-docs" : "\(query) — Search — apple-docs"
         return page(title: title, body: body)
+    }
+
+    /// Renders the static-export `/search` page: the form plus a results list filled client-side from the
+    /// prebuilt title index at `indexPath` (`app.js`).
+    public static func renderStaticSearchPage(indexPath: String) -> String {
+        let body =
+            "<h1>Search</h1>" + searchForm(query: "")
+            + "<ul class=\"results\" data-static-search=\"\(escapeHTML(indexPath))\" aria-live=\"polite\"></ul>"
+        return page(title: "Search — apple-docs", body: body)
     }
 
     static func searchForm(query: String, action: String = "/search", placeholder: String = "Search documentation")

@@ -102,3 +102,7 @@ th, td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: le
 
 .font-family { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem 1rem; margin: 1rem 0; }
 .not-found { text-align: center; padding: 4rem 0; }
+
+.lang-toggle { display: inline-flex; gap: 0; margin: 0.5rem 0 0.25rem; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.lang-btn { border: 0; background: var(--bg); color: var(--muted); padding: 0.25rem 0.75rem; font: inherit; cursor: pointer; }
+.lang-btn.active { background: var(--accent); color: #fff; }

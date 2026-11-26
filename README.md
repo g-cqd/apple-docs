@@ -22,8 +22,9 @@ python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py
 # Local website + read-only JSON API (pages: /, /search, /doc/<key>, /symbols, /fonts, /sitemap.xml)
 apple-docs web serve --port 3134 [--base-url https://docs.example] [--no-metrics]
 
-# Static site (same pages, assets, sitemaps); rebuilds replace the output directory atomically
-apple-docs web build ./dist --base-url https://docs.example --max-pages 100000 --concurrency 8
+# Static site (same pages, assets, sitemaps, client-side title search); rebuilds replace the output directory
+# atomically. A base URL with a path (e.g. GitHub Pages) roots every link under that path.
+apple-docs web build ./dist --base-url https://user.github.io/apple-docs --max-pages 1000000 --concurrency 8
 
 # MCP over Streamable HTTP
 apple-docs mcp serve --port 3133

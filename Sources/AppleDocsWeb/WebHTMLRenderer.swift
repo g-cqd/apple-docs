@@ -40,7 +40,7 @@ public enum WebHTMLRenderer: Sendable {
         let meta = description.map { "\n<meta name=\"description\" content=\"\(escapeHTML($0))\">" } ?? ""
         return """
             <!doctype html>
-            <html lang="en">
+            <html lang="en" data-base="">
             <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -82,7 +82,7 @@ public enum WebHTMLRenderer: Sendable {
     /// A `<ul class="link-list">` of `/doc/<path>` links.
     static func linkList(_ links: [(path: String, title: String)]) -> String {
         let items = links.map { link in
-            "<li><a href=\"/doc/\(escapeHTML(link.path))\">\(escapeHTML(link.title))</a></li>"
+            "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(link.path)))\">\(escapeHTML(link.title))</a></li>"
         }
         return "<ul class=\"link-list\">\(items.joined())</ul>"
     }

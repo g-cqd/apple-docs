@@ -17,8 +17,14 @@ import Foundation
 struct StaticSiteOutput: Sendable {
     let final: URL
     let staging: URL
+    /// Rewrites root-relative links in written HTML under the site's base path.
+    let site: WebSiteConfiguration
 
-    init(outputDirectory: String, markerFileName: String) throws(StaticSiteBuilder.BuildError) {
+    init(
+        outputDirectory: String,
+        markerFileName: String,
+        site: WebSiteConfiguration
+    ) throws(StaticSiteBuilder.BuildError) {
         let final = URL(fileURLWithPath: outputDirectory, isDirectory: true).standardizedFileURL
         let fm = FileManager.default
         guard final.path != "/", final.path != fm.homeDirectoryForCurrentUser.standardizedFileURL.path else {
@@ -40,6 +46,7 @@ struct StaticSiteOutput: Sendable {
         }
         self.final = final
         self.staging = staging
+        self.site = site
     }
 
     /// Writes `bytes` at `relativePath` (validated: no absolute paths, no `.`/`..` segments) inside staging.
@@ -58,6 +65,11 @@ struct StaticSiteOutput: Sendable {
         } catch {
             throw .io("\(relativePath): \(error.localizedDescription)")
         }
+    }
+
+    /// Writes a rendered page with its links rooted under the site's base path.
+    func writeHTML(_ html: String, to relativePath: String) throws(StaticSiteBuilder.BuildError) {
+        try write(Array(site.rooted(html).utf8), to: relativePath)
     }
 
     /// Swaps staging into place; the previous export (if any) is removed only after the swap succeeded.

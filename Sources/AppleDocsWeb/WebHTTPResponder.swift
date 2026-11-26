@@ -49,7 +49,11 @@ public struct WebHTTPResponder: HTTPResponder, Sendable {
         guard request.method == .get || request.method == .head else {
             return hardened(.status(.methodNotAllowed), cacheControl: "no-store")
         }
-        let target = WebRequestTarget(request.path)
+        let requested = WebRequestTarget(request.path)
+        guard let sitePath = site.sitePath(forRequestPath: requested.path) else {
+            return hardened(notFoundPage(requested.path), cacheControl: "no-store")
+        }
+        let target = WebRequestTarget(path: sitePath, query: requested.query)
         let response: ServerResponse =
             if let discovery = handleDiscovery(path: target.path) {
                 discovery
@@ -108,7 +112,7 @@ public struct WebHTTPResponder: HTTPResponder, Sendable {
     }
 
     func htmlResponse(_ html: String, status: HTTPStatus = .ok) -> ServerResponse {
-        response(Array(html.utf8), contentType: "text/html; charset=utf-8", status: status)
+        response(Array(site.rooted(html).utf8), contentType: "text/html; charset=utf-8", status: status)
     }
 
     func notFoundPage(_ path: String) -> ServerResponse {

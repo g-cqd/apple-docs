@@ -5,6 +5,11 @@ struct WebRequestTarget: Sendable {
     let path: String
     let query: [String: String]
 
+    init(path: String, query: [String: String]) {
+        self.path = path
+        self.query = query
+    }
+
     init(_ target: String) {
         guard let qIndex = target.firstIndex(of: "?") else {
             self.path = target

@@ -3,6 +3,7 @@ import AppleDocsCommands
 import AppleDocsCore
 import AppleDocsOutput
 import AppleDocsSearch
+import AppleDocsStorage
 import Foundation
 
 /// Server-rendered HTML pages.
@@ -53,7 +54,23 @@ extension WebHTTPResponder {
         var rawKey = Substring(path.dropFirst("/doc/".count))
         while rawKey.hasSuffix("/") { rawKey = rawKey.dropLast() }
         if rawKey.hasSuffix("/index.html") { rawKey = rawKey.dropLast("/index.html".count) }
-        guard let key = try? DocumentKey(String(rawKey)) else {
+        let requested = String(rawKey)
+        let resolved: String? =
+            WebDocPath.containsHashedSegment(requested)
+            ? try await reader.withConnection { connection in
+                // A hashed path maps back to the one key whose safe form it is (keys sharing the prefix).
+                try connection.query(
+                    "SELECT key FROM documents WHERE key >= ? AND key < ? LIMIT 64",
+                    bindings: [
+                        .text(WebDocPath.lookupPrefix(requested)),
+                        .text(WebDocPath.lookupPrefix(requested) + "\u{10FFFF}")
+                    ]
+                )
+                .compactMap { try? $0.text(at: 0) }
+                .first { WebDocPath.safeKey($0) == requested }
+            } : requested
+        guard let resolved else { return notFoundPage(path) }
+        guard let key = try? DocumentKey(resolved) else {
             return htmlResponse(WebHTMLRenderer.renderNotFoundPage(path: path), status: .badRequest)
         }
         guard let view = try await reader.withStore({ try WebDocumentView.load(key: key, store: $0) }) else {

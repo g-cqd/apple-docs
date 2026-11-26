@@ -58,9 +58,9 @@ extension StaticSiteBuilder {
                     failures += 1
                     continue
                 }
-                try output.write(
-                    Array(WebHTMLRenderer.renderDocumentPage(view).utf8),
-                    to: "doc/\(key.rawValue)/index.html"
+                try output.writeHTML(
+                    WebHTMLRenderer.renderDocumentPage(view),
+                    to: "doc/\(WebDocPath.safeKey(key.rawValue))/index.html"
                 )
                 exported.append(key.rawValue)
             } catch {

@@ -58,7 +58,7 @@ enum WebMarkdownBlockRenderer {
             out += emphasize(WebHTMLRenderer.escapeHTML(String(rest[..<open])))
             if let key = try? DocumentKey(String(target)) {
                 out +=
-                    "<a href=\"/doc/\(WebHTMLRenderer.escapeHTML(key.rawValue))\">"
+                    "<a href=\"/doc/\(WebHTMLRenderer.escapeHTML(WebDocPath.safeKey(key.rawValue)))\">"
                     + emphasize(WebHTMLRenderer.escapeHTML(String(title))) + "</a>"
             } else {
                 out += emphasize(WebHTMLRenderer.escapeHTML(String(rest[open ... end])))
