@@ -92,6 +92,18 @@ struct MCPServerTests {
             #"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_taxonomy","arguments":{"field":"kind"}}}"#
         let taxResp = try #require(await dispatcher.handleRawPayload(Array(taxCall.utf8)))
         #expect(String(decoding: taxResp, as: UTF8.self).contains("struct"))
+
+        let symCall =
+            #"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"search_sf_symbols","arguments":{"query":"star"}}}"#
+        let symResp = try #require(await dispatcher.handleRawPayload(Array(symCall.utf8)))
+        #expect(String(decoding: symResp, as: UTF8.self).contains("star.fill"))
+
+        let fontCall =
+            #"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_apple_fonts","arguments":{}}}"#
+        let fontResp = try #require(await dispatcher.handleRawPayload(Array(fontCall.utf8)))
+        let fontText = String(decoding: fontResp, as: UTF8.self)
+        #expect(fontText.contains("SF Pro"))
+        #expect(!fontText.contains("/Users/"))
     }
 
     @Test func `MCPHTTPResponder enforces Origin allowlist, method checks, body cap, and batch rejection`() async throws
@@ -167,6 +179,16 @@ struct MCPServerTests {
         try store.replaceSections(
             forDocumentID: id,
             sections: [DocumentSectionRecord(sectionKind: "overview", heading: "Overview", contentText: "Push views.")]
+        )
+        try store.connection.executeScript(
+            """
+            INSERT INTO sf_symbols (name, scope, keywords_json, categories_json, codepoint)
+            VALUES ('star.fill', 'public', '["favorite"]', '["objectsandtools"]', 1048576);
+            INSERT INTO apple_font_families (id, display_name, category, status)
+            VALUES ('sf-pro', 'SF Pro', 'system', 'available');
+            INSERT INTO apple_font_files (id, family_id, file_name, file_path, format)
+            VALUES ('sf-pro-reg', 'sf-pro', 'SF-Pro.ttf', '/Users/secret/fonts/SF-Pro.ttf', 'ttf');
+            """
         )
     }
 }

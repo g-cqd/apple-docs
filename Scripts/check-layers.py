@@ -61,6 +61,8 @@ ALLOWED = {
         "AppleDocsContent",
         "AppleDocsCore",
         "AppleDocsOutput",
+        "AppleDocsSearch",
+        "AppleDocsStorage",
     },
     "AppleDocsTestSupport": {"AppleDocsCore"},
 }

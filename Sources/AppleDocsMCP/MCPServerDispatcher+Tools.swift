@@ -41,6 +41,10 @@ extension MCPServerDispatcher {
                 return try await invokeBrowse(arguments)
             case "list_taxonomy":
                 return try await invokeListTaxonomy(arguments)
+            case "search_sf_symbols":
+                return try await invokeSearchSFSymbols(arguments)
+            case "list_apple_fonts":
+                return try await invokeListAppleFonts()
             default:
                 throw JSONRPCError(code: JSONRPCError.methodNotFound, message: "Unknown tool: \(name)")
         }
@@ -128,6 +132,21 @@ extension MCPServerDispatcher {
         let limit = (args["all"].bool == true) ? 500 : 20
         return try await encodeFromPool { conn in
             try CorpusQueryService.listTaxonomy(field: field, limit: limit, on: conn)
+        }
+    }
+
+    private func invokeSearchSFSymbols(_ args: JSON) async throws -> String {
+        let query = args["query"].string ?? ""
+        let scope = args["scope"].string ?? "public"
+        let limit = args["limit"].int ?? 100
+        return try await encodeFromPool { conn in
+            try AssetQueryService.searchSFSymbols(query: query, scope: scope, limit: limit, on: conn)
+        }
+    }
+
+    private func invokeListAppleFonts() async throws -> String {
+        try await encodeFromPool { conn in
+            try AssetQueryService.listAppleFonts(on: conn)
         }
     }
 
