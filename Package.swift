@@ -229,8 +229,9 @@ let package = Package(
         .testTarget(
             name: "AppleDocsSetupTests",
             dependencies: [
-                "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsSetup",
-                "AppleDocsSetupDarwin", "AppleDocsTestSupport"
+                "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsPipeline",
+                "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsSources", "AppleDocsStorage",
+                "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSetupTests",
             swiftSettings: strictSettings

@@ -43,6 +43,21 @@ public enum ScrubbedSubprocess: Sendable {
         return filtered
     }
 
+    /// Executes `executable` requiring exit status `0`, returning standard output or throwing
+    /// ``SetupError/commandFailed(tool:exitCode:stderr:)``.
+    public static func runChecked(
+        executable: String,
+        arguments: [String],
+        toolLabel: String? = nil,
+        maxOutputBytes: Int = 1_048_576
+    ) async throws(SetupError) -> String {
+        let outcome = try await run(executable: executable, arguments: arguments, maxOutputBytes: maxOutputBytes)
+        guard outcome.exitCode == 0 else {
+            throw .commandFailed(tool: toolLabel ?? executable, exitCode: outcome.exitCode, stderr: outcome.stderr)
+        }
+        return outcome.stdout
+    }
+
     /// Executes `executable` (by name via `PATH` or absolute path) with scrubbed environment and capped output.
     public static func run(
         executable: String,

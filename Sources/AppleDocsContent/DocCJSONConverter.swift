@@ -5,19 +5,13 @@ public import AppleDocsCore
 /// `platforms`, `identifier`) into normalized ``DocumentRecord`` + ``DocumentSectionRecord`` values
 /// via `g-cqd/AemiJSON`'s zero-copy tape parser.
 public enum DocCJSONConverter: Sendable {
-    /// Result of converting a single DocC render JSON payload.
-    public struct ConvertedNode: Hashable, Sendable {
-        public let document: DocumentRecord
-        public let sections: [DocumentSectionRecord]
-    }
-
-    /// Converts raw DocC JSON UTF-8 `bytes` into a normalized ``DocumentRecord`` and sections.
+    /// Converts raw DocC JSON UTF-8 `bytes` into a normalized ``ConvertedDocument``.
     public static func convert(
         json bytes: [UInt8],
         key: DocumentKey,
         sourceType: SourceKind = .appleDocC,
         url: String? = nil
-    ) throws -> ConvertedNode {
+    ) throws -> ConvertedDocument {
         let root = try AemiJSON.parse(bytes).root
         let metadata = root["metadata"]
         let title = metadata["title"].string ?? key.rawValue
@@ -49,7 +43,7 @@ public enum DocCJSONConverter: Sendable {
             isBeta: flags.beta,
             urlDepth: max(0, key.rawValue.split(separator: "/").count - 1)
         )
-        return ConvertedNode(document: document, sections: sections)
+        return ConvertedDocument(document: document, sections: sections)
     }
 
     private static func parsePlatforms(_ node: JSON) -> PlatformAvailability {
@@ -106,41 +100,22 @@ public enum DocCJSONConverter: Sendable {
     }
 
     private static func extractContentSections(_ blocks: [JSON], startingOrder: Int) -> [DocumentSectionRecord] {
-        var result: [DocumentSectionRecord] = []
-        var currentHeading: String?
-        var currentLines: [String] = []
-
-        func flush() {
-            guard !currentLines.isEmpty else { return }
-            result.append(
-                DocumentSectionRecord(
-                    sectionKind: result.isEmpty && currentHeading == nil ? "overview" : "discussion",
-                    heading: currentHeading,
-                    contentText: currentLines.joined(separator: "\n\n"),
-                    sortOrder: startingOrder + result.count
-                )
-            )
-            currentLines.removeAll(keepingCapacity: true)
-        }
-
+        var builder = ConvertedDocument.SectionBuilder(startingOrder: startingOrder)
         for block in blocks {
             switch block["type"].string ?? "" {
                 case "heading":
-                    flush()
-                    currentHeading = block["text"].string
+                    builder.startSection(heading: block["text"].string)
                 case "paragraph":
-                    let text = flattenInlineText(block["inlineContent"])
-                    if !text.isEmpty { currentLines.append(text) }
+                    builder.appendBlock(flattenInlineText(block["inlineContent"]))
                 case "codeListing":
                     let syntax = block["syntax"].string ?? ""
                     let code = (block["code"].array ?? []).compactMap(\.string).joined(separator: "\n")
-                    if !code.isEmpty { currentLines.append("```\(syntax)\n\(code)\n```") }
+                    if !code.isEmpty { builder.appendBlock("```\(syntax)\n\(code)\n```") }
                 default:
                     continue
             }
         }
-        flush()
-        return result
+        return builder.finish()
     }
 
     private static func flattenInlineText(_ node: JSON) -> String {
