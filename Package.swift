@@ -239,6 +239,16 @@ let package = Package(
             ],
             path: "Tests/AppleDocsCoreTests",
             swiftSettings: strictSettings
+        ),
+        .testTarget(
+            name: "AppleDocsStorageTests",
+            dependencies: [
+                "AppleDocsCore",
+                "AppleDocsStorage",
+                "AppleDocsTestSupport"
+            ],
+            path: "Tests/AppleDocsStorageTests",
+            swiftSettings: strictSettings
         )
     ]
 )
