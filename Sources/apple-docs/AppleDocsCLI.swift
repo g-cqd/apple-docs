@@ -13,6 +13,10 @@ struct AppleDocsCLI: AsyncParsableCommand {
             SearchSubcommand.self,
             ReadSubcommand.self,
             ListSubcommand.self,
+            TaxonomySubcommand.self,
+            LinksSubcommand.self,
+            SymbolsSubcommand.self,
+            FontsSubcommand.self,
             ImportV31Subcommand.self,
             MCPSubcommand.self,
             WebSubcommand.self

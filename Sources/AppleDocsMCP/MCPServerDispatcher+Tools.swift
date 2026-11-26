@@ -46,7 +46,7 @@ extension MCPServerDispatcher {
             case "list_apple_fonts":
                 return try await invokeListAppleFonts()
             case "render_sf_symbol":
-                return try invokeRenderSFSymbol(arguments)
+                return try await invokeRenderSFSymbol(arguments)
             case "render_font_text":
                 return try await invokeRenderFontText(arguments)
             default:
@@ -59,25 +59,43 @@ extension MCPServerDispatcher {
         let deprecated =
             args["deprecated"].string
             .flatMap(CorpusSearchRequest.DeprecatedFilter.init(rawValue:)) ?? .include
+        let minVer = args["minVersion"]
+        let availability = PlatformAvailability(
+            ios: minVer["ios"].string,
+            macos: minVer["macos"].string,
+            watchos: minVer["watchos"].string,
+            tvos: minVer["tvos"].string,
+            visionos: minVer["visionos"].string
+        )
         let request = CorpusSearchRequest(
             query: query,
             framework: args["framework"].string,
             kind: args["kind"].string,
             language: args["language"].string,
+            sources: CorpusQueryService.parseSourceKinds(args["source"].string),
             deprecated: deprecated,
+            minVersions: availability,
             limit: args["limit"].int ?? 25
         )
-        return try await encodeFromPool { conn in
-            try CorpusQueryService.search(request, on: conn)
+        let semantic = await reader.semanticResources()
+        let results = try await reader.withConnection { conn in
+            try CorpusQueryService.search(request, semantic: semantic, on: conn)
         }
+        let encoded = try PublicProjection.encodeJSON(results)
+        if args["read"].bool == true, let top = results.first, let key = try? DocumentKey(top.path) {
+            if let detail = try await reader.withStore({ try CorpusQueryService.readDocument(key: key, on: $0) }) {
+                let topText = try formatDocumentOutput(detail: detail, args: args)
+                return "\(encoded)\n\n---\n\n\(topText)"
+            }
+        }
+        return encoded
     }
 
     private func invokeReadDoc(_ args: JSON) async throws -> String {
         let pathArg = args["path"].string
         let symbolArg = args["symbol"].string
         let frameworkArg = args["framework"].string
-        let maxChars = args["maxChars"].int
-        let page = args["page"].int ?? 1
+
         let detail: PublicDocumentDetail? = try await reader.withStore { store in
             if let pathArg {
                 let key = try DocumentKey(pathArg)
@@ -88,12 +106,32 @@ extension MCPServerDispatcher {
             }
             throw JSONRPCError(code: JSONRPCError.invalidParams, message: "read_doc requires 'path' or 'symbol'.")
         }
-
         guard let detail else {
             throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Document not found.")
         }
-        let markdown = detail.renderMarkdown()
-        if let maxChars {
+        return try formatDocumentOutput(detail: detail, args: args)
+    }
+
+    private func formatDocumentOutput(detail: PublicDocumentDetail, args: JSON) throws -> String {
+        let matchObj = args["match"]
+        if matchObj.isObject, let matchQuery = matchObj["query"].string, !matchQuery.isEmpty {
+            let excerpts = detail.matchExcerpts(
+                query: matchQuery,
+                context: matchObj["context"].int ?? 140,
+                maxMatches: matchObj["max"].int ?? 5,
+                caseSensitive: matchObj["caseSensitive"].bool ?? false
+            )
+            return try PublicProjection.encodeJSON(excerpts)
+        }
+        let sectionHeading = args["section"].string
+        guard let markdown = detail.renderMarkdown(sectionHeading: sectionHeading) else {
+            throw JSONRPCError(
+                code: JSONRPCError.invalidParams,
+                message: "Section '\(sectionHeading ?? "")' not found."
+            )
+        }
+        if let maxChars = args["maxChars"].int {
+            let page = args["page"].int ?? 1
             let slice = PublicProjection.paginate(markdown, maxChars: maxChars, page: page)
             return "\(slice.text)\n\n<!-- page \(slice.page)/\(slice.totalPages) -->"
         }
@@ -143,20 +181,20 @@ extension MCPServerDispatcher {
         }
     }
 
-    private func invokeRenderSFSymbol(_ args: JSON) throws -> String {
+    private func invokeRenderSFSymbol(_ args: JSON) async throws -> String {
         let name = try requiredString(args, key: "name", tool: "render_sf_symbol")
-        let scope = args["scope"].string ?? "public"
-        let size = args["size"].int ?? 128
-        let color = args["color"].string ?? "currentColor"
-        let background = args["background"].string ?? "transparent"
-        return try AssetRenderService.renderSFSymbolSVG(
-            name: name,
-            scope: scope,
-            size: size,
-            color: color,
-            background: background,
-            resourcesDirectory: CorpusPaths.defaultResourcesDirectory()
-        )
+        let options = SFSymbolRenderArgs(args: args)
+        let resourcesDir = reader.resourcesDirectory
+        return try await renderWithPermit {
+            try AssetRenderService.renderSFSymbolSVG(
+                name: name,
+                scope: options.scope,
+                size: options.size,
+                color: options.color,
+                background: options.background,
+                resourcesDirectory: resourcesDir
+            )
+        }
     }
 
     private func invokeRenderFontText(_ args: JSON) async throws -> String {
@@ -164,18 +202,15 @@ extension MCPServerDispatcher {
         let text = args["text"].string ?? "AaBbCc 0123"
         let size = Double(args["size"].int ?? 48)
         let dbPath = reader.databasePath
-        return
-            try await Task.detached {
-                let conn = try SQLiteConnection(path: dbPath, options: .readOnly)
-                defer { conn.close() }
-                return try await AssetRenderService.renderFontTextSVG(
-                    fontID: fontID,
-                    text: text,
-                    size: size,
-                    on: conn
-                )
-            }
-            .value
+        return try await renderWithPermit {
+            let conn = try SQLiteConnection(path: dbPath, options: .readOnly)
+            defer { conn.close() }
+            return try await AssetRenderService.renderFontTextSVG(fontID: fontID, text: text, size: size, on: conn)
+        }
+    }
+
+    private func renderWithPermit(_ work: @escaping @Sendable () async throws -> String) async throws -> String {
+        try await renderPermits.withPermit(work)
     }
 
     private func requiredString(_ args: JSON, key: String, tool: String) throws(JSONRPCError) -> String {
@@ -190,5 +225,19 @@ extension MCPServerDispatcher {
     ) async throws -> String {
         let value = try await reader.withConnection(query)
         return try PublicProjection.encodeJSON(value)
+    }
+}
+
+private struct SFSymbolRenderArgs: Sendable {
+    let scope: String
+    let size: Int
+    let color: String
+    let background: String
+
+    init(args: JSON) {
+        self.scope = args["scope"].string ?? "public"
+        self.size = args["size"].int ?? 128
+        self.color = args["color"].string ?? "currentColor"
+        self.background = args["background"].string ?? "transparent"
     }
 }

@@ -1,3 +1,4 @@
+// @dl:accept -- ArgumentParser query subcommand shares standard import & ParsableCommand shape
 import AppleDocsCommands
 import AppleDocsOutput
 import AppleDocsStorage
@@ -17,7 +18,7 @@ struct ListSubcommand: ParsableCommand {
     @Option(name: .long, help: "Browse children under a specific framework slug instead of listing roots.")
     var browse: String?
 
-    @Option(name: .shortAndLong, help: "Maximum rows to display when browsing.")
+    @Option(name: .long, help: "Maximum rows to display when browsing.")
     var limit = 100
 
     @OptionGroup var common: QueryCLIOptions

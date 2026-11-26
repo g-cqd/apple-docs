@@ -157,6 +157,7 @@ let package = Package(
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsMCP",
+            resources: [.process("Resources")],
             swiftSettings: strictSettings
         ),
         .target(

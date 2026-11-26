@@ -61,7 +61,7 @@ struct MCPServerTests {
         let dbPath = tempDir.appendingPathComponent("corpus.db").path
         try seedCorpus(at: dbPath)
 
-        let dispatcher = MCPServerDispatcher(databasePath: dbPath)
+        let dispatcher = MCPServerDispatcher(databasePath: dbPath, resourcesDirectory: tempDir.path)
         defer { Task { await dispatcher.close() } }
 
         let initResp = try #require(
@@ -116,7 +116,7 @@ struct MCPServerTests {
         let dbPath = tempDir.appendingPathComponent("corpus.db").path
         try seedCorpus(at: dbPath)
 
-        let dispatcher = MCPServerDispatcher(databasePath: dbPath)
+        let dispatcher = MCPServerDispatcher(databasePath: dbPath, resourcesDirectory: tempDir.path)
         let responder = MCPHTTPResponder(dispatcher: dispatcher, maxBodyBytes: 256)
 
         // Health probe

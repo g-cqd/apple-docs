@@ -2,6 +2,7 @@ public import AppleDocsCore
 public import AppleDocsOutput
 public import AppleDocsSearch
 public import AppleDocsStorage
+import Foundation
 
 /// Cross-platform read/query/browse/taxonomy command service shared by CLI, MCP, and Web.
 ///
@@ -17,15 +18,31 @@ public enum CorpusQueryService: Sendable {
         case framework
     }
 
-    /// Runs a filtered corpus search and projects hits through ``PublicSearchResult``.
+    /// Runs a filtered corpus search (using hybrid semantic fusion when `semantic` is provided)
+    /// and projects hits through ``PublicSearchResult``.
     public static func search(
         _ request: CorpusSearchRequest,
+        semantic: (embedder: Model2VecEmbedder, index: SemanticCorpusIndex)? = nil,
         on connection: SQLiteConnection
     ) throws(SQLiteError) -> [PublicSearchResult] {
-        let hits = try CorpusSearchEngine.search(request, on: connection)
+        let hits: [CorpusSearchHit] =
+            if let semantic {
+                try semantic.index.hybridSearch(request, embedder: semantic.embedder, on: connection)
+            } else {
+                try CorpusSearchEngine.search(request, on: connection)
+            }
         return hits.map { hit in
             PublicSearchResult(document: hit.document, confidence: hit.confidence.rawValue)
         }
+    }
+
+    /// Parses a comma-separated source slug string (e.g. `"apple-docc,hig,wwdc"`) into typed ``SourceKind`` values.
+    public static func parseSourceKinds(_ csv: String?) -> [SourceKind] {
+        guard let csv, !csv.isEmpty else { return [] }
+        return
+            csv
+            .split(separator: ",")
+            .compactMap { SourceKind(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) }
     }
 
     /// Reads a single document and its ordered sections by validated ``DocumentKey``.
@@ -114,6 +131,31 @@ public enum CorpusQueryService: Sendable {
             )
         }
         return items
+    }
+
+    /// Direction filter for relationship queries.
+    public enum LinkDirection: String, Hashable, Sendable, CaseIterable {
+        case outgoing
+        case incoming
+        case both
+    }
+
+    /// Queries incoming and/or outgoing relationships for `key` projected through ``PublicDocumentLink``.
+    public static func links(
+        forKey key: DocumentKey,
+        direction: LinkDirection = .both,
+        limit: Int = 100,
+        on store: CorpusStore
+    ) throws(SQLiteError) -> [PublicDocumentLink] {
+        let clampedLimit = max(1, min(limit, 500))
+        var records: [DocumentRelationshipRecord] = []
+        if direction == .outgoing || direction == .both {
+            records.append(contentsOf: try store.outgoingRelationships(from: key))
+        }
+        if direction == .incoming || direction == .both {
+            records.append(contentsOf: try store.incomingRelationships(to: key))
+        }
+        return records.prefix(clampedLimit).map(PublicDocumentLink.init)
     }
 
     /// Aggregates distinct values and document counts for one taxonomy `field`.

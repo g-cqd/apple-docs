@@ -103,6 +103,20 @@ public final class CorpusStore {
         return try rows.map(Self.decodeRelationship)
     }
 
+    /// Returns incoming relationships targeting `key`, ordered by `from_key`.
+    public func incomingRelationships(to key: DocumentKey) throws(SQLiteError) -> [DocumentRelationshipRecord] {
+        let rows = try connection.query(
+            """
+            SELECT from_key, to_key, relation_type, section, sort_order
+            FROM document_relationships
+            WHERE to_key = ?
+            ORDER BY sort_order, from_key
+            """,
+            bindings: [.text(key.rawValue)]
+        )
+        return try rows.map(Self.decodeRelationship)
+    }
+
     /// Deletes a document by key (cascading sections, raw payloads, chunks, vectors, and FTS triggers).
     public func deleteDocument(forKey key: DocumentKey) throws(SQLiteError) {
         try connection.execute("DELETE FROM documents WHERE key = ?", bindings: [.text(key.rawValue)])

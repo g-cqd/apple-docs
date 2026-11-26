@@ -5,20 +5,36 @@ import AppleDocsCore
 import OrderedCollections
 
 /// Cross-platform MCP server dispatcher handling JSON-RPC 2.0 requests (`initialize`, `ping`,
-/// `tools/list`, `tools/call`) against a pooled read-only ``CorpusReaderHandle``.
+/// `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`)
+/// against a pooled read-only ``CorpusReaderHandle``, bounded LRU cache, and render semaphore.
 public final class MCPServerDispatcher: Sendable {
     /// Supported MCP protocol version advertised during `initialize`.
     public static let protocolVersion = "2025-03-26"
 
     let reader: CorpusReaderHandle
+    let markdownCache: BoundedLRUCache<String, String>
+    let renderPermits: AsyncPermitPool
 
-    /// Creates a dispatcher backed by `databasePath` with a bounded reader pool.
-    public init(databasePath: String, maxReaders: Int = 4) {
-        self.reader = CorpusReaderHandle(databasePath: databasePath, maxReaders: maxReaders)
+    /// Creates a dispatcher backed by `databasePath` with bounded reader pool, LRU cache, and render concurrency cap.
+    public init(
+        databasePath: String,
+        resourcesDirectory: String? = nil,
+        maxReaders: Int = 4,
+        cacheCapacity: Int = 256,
+        maxConcurrentRenders: Int = 4
+    ) {
+        self.reader = CorpusReaderHandle(
+            databasePath: databasePath,
+            resourcesDirectory: resourcesDirectory,
+            maxReaders: maxReaders
+        )
+        self.markdownCache = BoundedLRUCache(capacity: cacheCapacity)
+        self.renderPermits = AsyncPermitPool(limit: maxConcurrentRenders)
     }
 
-    /// Closes pooled SQLite readers cleanly on shutdown.
+    /// Closes pooled SQLite readers and clears caches cleanly on shutdown.
     public func close() async {
+        await markdownCache.removeAll()
         await reader.close()
     }
 
@@ -59,6 +75,12 @@ public final class MCPServerDispatcher: Sendable {
                 return .success(toolsListResult())
             case "tools/call":
                 return await handleToolCall(request.params)
+            case "resources/list":
+                return await handleResourcesList()
+            case "resources/templates/list":
+                return .success(resourceTemplatesResult())
+            case "resources/read":
+                return await handleResourceRead(request.params)
             default:
                 return .failure(
                     JSONRPCError(code: JSONRPCError.methodNotFound, message: "Unknown method: \(request.method)")
@@ -69,7 +91,10 @@ public final class MCPServerDispatcher: Sendable {
     private func initializeResult() -> JSONValue {
         .object([
             "protocolVersion": .string(Self.protocolVersion),
-            "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
+            "capabilities": .object([
+                "tools": .object(["listChanged": .bool(false)]),
+                "resources": .object(["subscribe": .bool(false), "listChanged": .bool(false)])
+            ]),
             "serverInfo": .object([
                 "name": .string("apple-docs"),
                 "version": .string(AppleDocsVersion.current)
@@ -81,13 +106,14 @@ public final class MCPServerDispatcher: Sendable {
         let toolObjects: [JSONValue] = MCPToolDescriptor.allTools.map { descriptor in
             .object([
                 "name": .string(descriptor.name),
+                "description": .string(descriptor.description),
                 "annotations": .object([
                     "readOnlyHint": .bool(descriptor.isReadOnly),
                     "destructiveHint": .bool(false),
                     "idempotentHint": .bool(true),
                     "openWorldHint": .bool(false)
                 ]),
-                "inputSchema": .object(["type": .string("object")])
+                "inputSchema": descriptor.inputSchema
             ])
         }
         return .object(["tools": .array(toolObjects)])
