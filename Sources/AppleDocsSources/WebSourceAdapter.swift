@@ -59,11 +59,11 @@ public struct WebSourceAdapter: SourceAdapter, Sendable {
         client: UpstreamHTTPClient
     ) async throws(SourceError) -> SourceFetchOutcome {
         let url = try dataURL(for: key)
-        let response = try await client.get(url: url, ifNoneMatch: previousETag)
-        if response.isNotModified { return .notModified }
-        if response.isDeleted { return .notFound }
-        guard (200 ... 299).contains(response.statusCode) else {
-            throw .httpStatus(response.statusCode, url: url)
+        let response: UpstreamFetchResponse
+        switch try await client.conditionalGet(url: url, etag: previousETag) {
+            case .notModified: return .notModified
+            case .gone: return .notFound
+            case .ok(let ok): response = ok
         }
         let payload = SourcePayload(
             key: key,

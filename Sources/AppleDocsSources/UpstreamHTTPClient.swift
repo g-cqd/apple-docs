@@ -35,6 +35,23 @@ public final class UpstreamHTTPClient: Sendable {
         self.policy = policy
     }
 
+    /// What a conditional GET found.
+    public enum ConditionalOutcome: Sendable {
+        case notModified
+        case gone
+        case ok(UpstreamFetchResponse)
+    }
+
+    /// Conditional GET with `If-None-Match`: 304 → ``ConditionalOutcome/notModified``, 404/410 →
+    /// ``ConditionalOutcome/gone``, 2xx → the response; any other status throws.
+    public func conditionalGet(url: String, etag: String?) async throws(SourceError) -> ConditionalOutcome {
+        let response = try await get(url: url, ifNoneMatch: etag)
+        if response.isNotModified { return .notModified }
+        if response.isDeleted { return .gone }
+        guard (200 ... 299).contains(response.statusCode) else { throw .httpStatus(response.statusCode, url: url) }
+        return .ok(response)
+    }
+
     /// Validates `url` against HTTPS-only & SSRF rules (rejecting loopback, link-local, private RFC1918,
     /// metadata IPs, and embedded credentials) before issuing a conditional GET with retries.
     public func get(

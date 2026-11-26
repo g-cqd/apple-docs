@@ -108,10 +108,13 @@ extension LegacyV31Importer {
             // drives root page counts and browse listings exactly like Bun's `pages` joins.
             "pages",
             """
-            INSERT OR REPLACE INTO crawl_state (path, status, root_slug, depth)
+            INSERT OR REPLACE INTO crawl_state (path, status, root_slug, depth, etag, last_modified)
             SELECT lower(p.path), CASE p.status WHEN 'active' THEN 'done' ELSE p.status END, r.slug,
-                   COALESCE(p.url_depth, 0)
+                   COALESCE(p.url_depth, 0), p.etag, p.last_modified
             FROM legacy.pages p JOIN legacy.roots r ON r.id = p.root_id;
+            -- Bun's last full per-page sweep: the next Swift sync keeps Bun's 7-day sweep schedule.
+            INSERT OR REPLACE INTO sync_checkpoint (key, value)
+            SELECT 'docc_full_sweep_at', value FROM legacy.schema_meta WHERE key = 'docc_full_sweep_at';
             """
         ),
         (

@@ -10,6 +10,7 @@ extension SyncOrchestrator {
             group in
             var state = PoolState()
             do {
+                try releaseClaims(context: context)
                 try fill(&group, state: &state, context: context)
                 while let entry = await group.next() {
                     state.inFlight.remove(entry.path)
@@ -39,24 +40,62 @@ extension SyncOrchestrator {
         let options = context.options
         let wanted = min(options.concurrency - state.inFlight.count, options.maxPages - state.dispatched)
         guard wanted > 0 else { return }
-        let db = context.store.connection
-        let rows = try dequeuePendingBatch(
-            rootSlug: context.rootSlug,
-            maxDepth: options.maxDepth,
-            limit: wanted + state.inFlight.count,
-            on: db
-        )
-        let adapter = context.adapter
         let client = context.client
-        let inFlight = state.inFlight
-        for row in rows.filter({ !inFlight.contains($0.path) }).prefix(wanted) {
-            let key = try? DocumentKey(row.path)
-            let etag: String? =
-                if let key { try readCheckpoint(key: "etag:\(key.rawValue)", on: db) } else { nil }
-            let pending = PendingFetch(path: row.path, depth: row.depth, key: key, etag: etag)
-            state.inFlight.insert(row.path)
+        for pending in try claimPending(limit: wanted, context: context) {
+            guard let adapter = context.adapters[pending.rootSlug] else { continue }
+            state.inFlight.insert(pending.path)
             state.dispatched += 1
             group.addTask { await fetchOne(pending, adapter: adapter, client: client) }
         }
+    }
+
+    /// Atomically marks up to `limit` pending rows of the run's roots `fetching` (breadth-first order) and returns
+    /// them; a crash leaves them `fetching`, which ``releaseClaims(context:)`` returns to the queue next run.
+    static func claimPending(
+        limit: Int,
+        context: RunContext
+    ) throws(SQLiteError) -> [PendingFetch] {
+        let rows = try context.store.connection.query(
+            """
+            UPDATE crawl_state SET status = 'fetching'
+            WHERE path IN (
+                SELECT path FROM crawl_state
+                WHERE status = 'pending' AND depth <= ? AND root_slug IN (SELECT value FROM json_each(?))
+                ORDER BY depth, path
+                LIMIT ?
+            )
+            RETURNING path, depth, root_slug,
+                COALESCE(etag, (SELECT value FROM sync_checkpoint WHERE key = 'etag:' || crawl_state.path))
+            """,
+            bindings: [
+                .integer(Int64(context.options.maxDepth)), .text(context.rootsJSON), .integer(Int64(max(1, limit)))
+            ]
+        )
+        var claimed: [PendingFetch] = []
+        claimed.reserveCapacity(rows.count)
+        for row in rows {
+            let path = try row.text(at: 0)
+            claimed.append(
+                PendingFetch(
+                    path: path,
+                    depth: Int(try row.integer(at: 1)),
+                    rootSlug: try row.text(at: 2),
+                    key: try? DocumentKey(path),
+                    etag: try row.optionalText(at: 3)
+                )
+            )
+        }
+        return claimed.sorted { ($0.depth, $0.path) < ($1.depth, $1.path) }
+    }
+
+    /// Returns rows claimed by an interrupted run to the queue.
+    static func releaseClaims(context: RunContext) throws(SQLiteError) {
+        try context.store.connection.execute(
+            """
+            UPDATE crawl_state SET status = 'pending'
+            WHERE status = 'fetching' AND root_slug IN (SELECT value FROM json_each(?))
+            """,
+            bindings: [.text(context.rootsJSON)]
+        )
     }
 }

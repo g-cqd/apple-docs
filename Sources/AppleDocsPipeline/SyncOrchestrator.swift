@@ -27,7 +27,7 @@ public enum SyncOrchestrator: Sendable {
             self.maxPages = max(1, maxPages)
             self.maxDepth = max(0, maxDepth)
             self.tombstoneThreshold = max(1, tombstoneThreshold)
-            self.concurrency = max(1, min(concurrency, 64))
+            self.concurrency = max(1, min(concurrency, 256))
             self.stayWithinSeedRoot = stayWithinSeedRoot
         }
     }
@@ -40,14 +40,32 @@ public enum SyncOrchestrator: Sendable {
         public let tombstoned: Int
         public let errors: Int
         public let discoveredQueued: Int
+
+        public static let empty = RunReport(source: .appleDocC, counters: Counters())
+
+        init(source: SourceKind, counters: Counters) {
+            self.source = source
+            self.fetchedModified = counters.modified
+            self.skippedNotModified = counters.skipped
+            self.tombstoned = counters.tombstoned
+            self.errors = counters.errors
+            self.discoveredQueued = counters.discovered
+        }
     }
 
+    /// What one worker-pool run crawls: the roots it may claim pending rows from, with each root's adapter.
     struct RunContext {
-        let rootSlug: String
-        let adapter: any SourceAdapter
+        let adapters: [String: any SourceAdapter]
         let client: UpstreamHTTPClient
         let store: CorpusStore
         let options: Options
+
+        /// The claimable roots as a JSON array (bound to `json_each`).
+        var rootsJSON: String {
+            "["
+                + adapters.keys.sorted().map { "\"" + $0.replacingScalars(["\\": "\\\\", "\"": "\\\""]) + "\"" }
+                .joined(separator: ",") + "]"
+        }
     }
 
     struct Counters {
@@ -56,11 +74,20 @@ public enum SyncOrchestrator: Sendable {
         var tombstoned = 0
         var errors = 0
         var discovered = 0
+
+        mutating func add(_ other: Counters) {
+            modified += other.modified
+            skipped += other.skipped
+            tombstoned += other.tombstoned
+            errors += other.errors
+            discovered += other.discovered
+        }
     }
 
     struct PendingFetch: Sendable {
         let path: String
         let depth: Int
+        let rootSlug: String
         let key: DocumentKey?
         let etag: String?
     }
@@ -68,11 +95,11 @@ public enum SyncOrchestrator: Sendable {
     struct FetchedEntry: Sendable {
         let path: String
         let depth: Int
+        let rootSlug: String
         let key: DocumentKey?
         let outcome: Result<SourceFetchOutcome, any Error>
     }
 
-    /// Executes a resumable discover -> concurrent crawl -> convert -> checkpoint cycle for `adapter`.
     public static func sync(
         adapter: any SourceAdapter,
         seeds: [DocumentKey]? = nil,
@@ -90,7 +117,7 @@ public enum SyncOrchestrator: Sendable {
             seedPath: initialSeeds.first?.rawValue ?? adapter.defaultRoot.seedPath
         )
         try seedQueue(root: root, seeds: initialSeeds, into: store)
-        let context = RunContext(rootSlug: rootSlug, adapter: adapter, client: client, store: store, options: options)
+        let context = RunContext(adapters: [rootSlug: adapter], client: client, store: store, options: options)
         let counters = try await runWorkerPool(context: context)
         try refreshRootStats(rootSlug: rootSlug, seedPath: root.seedPath, on: store.connection)
 
@@ -99,14 +126,7 @@ public enum SyncOrchestrator: Sendable {
             value: SyncPhase.consolidate.rawValue,
             on: store.connection
         )
-        return RunReport(
-            source: adapter.kind,
-            fetchedModified: counters.modified,
-            skippedNotModified: counters.skipped,
-            tombstoned: counters.tombstoned,
-            errors: counters.errors,
-            discoveredQueued: counters.discovered
-        )
+        return RunReport(source: adapter.kind, counters: counters)
     }
 
     static func fetchOne(
@@ -114,15 +134,16 @@ public enum SyncOrchestrator: Sendable {
         adapter: any SourceAdapter,
         client: UpstreamHTTPClient
     ) async -> FetchedEntry {
+        func entry(_ outcome: Result<SourceFetchOutcome, any Error>) -> FetchedEntry {
+            FetchedEntry(path: item.path, depth: item.depth, rootSlug: item.rootSlug, key: item.key, outcome: outcome)
+        }
         guard let key = item.key else {
-            let err = SourceError.unsafeURL(item.path, reason: "invalid key")
-            return FetchedEntry(path: item.path, depth: item.depth, key: nil, outcome: .failure(err))
+            return entry(.failure(SourceError.unsafeURL(item.path, reason: "invalid key")))
         }
         do {
-            let outcome = try await adapter.fetch(key: key, previousETag: item.etag, client: client)
-            return FetchedEntry(path: item.path, depth: item.depth, key: key, outcome: .success(outcome))
+            return entry(.success(try await adapter.fetch(key: key, previousETag: item.etag, client: client)))
         } catch {
-            return FetchedEntry(path: item.path, depth: item.depth, key: key, outcome: .failure(error))
+            return entry(.failure(error))
         }
     }
 }

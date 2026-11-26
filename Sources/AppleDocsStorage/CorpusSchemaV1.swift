@@ -21,7 +21,9 @@ public enum CorpusSchemaV1: Sendable {
     // @dl:accept -- declarative column list (same tuple-array shape as WebAssetCatalog's manifest)
     static let addedColumns: [(table: String, column: String, definition: String)] = [
         ("documents", "platforms_json", "TEXT"),
-        ("roots", "last_seen", "TEXT")
+        ("roots", "last_seen", "TEXT"),
+        ("crawl_state", "etag", "TEXT"),
+        ("crawl_state", "last_modified", "TEXT")
     ]
 
     /// Indexes added to v1 after its first release (idempotent DDL).
@@ -32,7 +34,8 @@ public enum CorpusSchemaV1: Sendable {
             canonical TEXT NOT NULL, alias TEXT NOT NULL UNIQUE, PRIMARY KEY (canonical, alias)
         );
         """,
-        "CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram_vocab USING fts5vocab(documents_trigram, 'row');"
+        "CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram_vocab USING fts5vocab(documents_trigram, 'row');",
+        "CREATE INDEX IF NOT EXISTS idx_crawl_queue ON crawl_state(status, depth, path);"
     ]
 
     /// Whether `documents_body_fts` predates the contentless (Bun-compatible) definition and must be rebuilt.
@@ -44,13 +47,13 @@ public enum CorpusSchemaV1: Sendable {
 
     /// Adds ``addedColumns`` and ``addedIndexes`` missing from an existing v1 database (every read-write open).
     static func addMissingColumns(on connection: SQLiteConnection) throws(SQLiteError) {
-        for ddl in addedIndexes { try connection.executeScript(ddl) }
         for added in addedColumns {
             let existing = try connection.query("PRAGMA table_info(\(added.table))")
             let names = try existing.map { row throws(SQLiteError) in try row.text(at: 1) }
             guard !names.contains(added.column) else { continue }
             try connection.executeScript("ALTER TABLE \(added.table) ADD COLUMN \(added.column) \(added.definition);")
         }
+        for ddl in addedIndexes { try connection.executeScript(ddl) }
     }
 
     private static func loadDDL() throws(SQLiteError) -> String {

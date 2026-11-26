@@ -107,7 +107,8 @@ let package = Package(
         .target(
             name: "AppleDocsSources",
             dependencies: [
-                "AppleDocsCore", .product(name: "AemiRegex", package: "AemiRegex"),
+                "AppleDocsContent", "AppleDocsCore", .product(name: "AemiJSONCore", package: "AemiJSON"),
+                .product(name: "AemiRegex", package: "AemiRegex"),
                 .product(name: "URLBuilder", package: "URLBuilder")
             ],
             path: "Sources/AppleDocsSources",
@@ -118,7 +119,7 @@ let package = Package(
             name: "AppleDocsPipeline",
             dependencies: [
                 "AppleDocsCore", "AppleDocsContent", "AppleDocsSearch", "AppleDocsSources", "AppleDocsStorage",
-                .product(name: "AemiSearch", package: "AemiSearch")
+                .product(name: "AemiSearch", package: "AemiSearch"), .product(name: "AemiDigest", package: "aemi")
             ],
             path: "Sources/AppleDocsPipeline",
             swiftSettings: strictSettings

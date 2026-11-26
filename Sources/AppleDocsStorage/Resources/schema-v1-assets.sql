@@ -70,14 +70,18 @@ CREATE TABLE IF NOT EXISTS sf_symbol_renders (
 );
 
 CREATE TABLE IF NOT EXISTS crawl_state (
-    path      TEXT PRIMARY KEY,
-    status    TEXT NOT NULL DEFAULT 'pending',
-    root_slug TEXT NOT NULL,
-    depth     INTEGER NOT NULL DEFAULT 0,
-    error     TEXT
+    path          TEXT PRIMARY KEY,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    root_slug     TEXT NOT NULL,
+    depth         INTEGER NOT NULL DEFAULT 0,
+    error         TEXT,
+    etag          TEXT,
+    last_modified TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_crawl_root_status ON crawl_state(root_slug, status);
 CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);
+-- The sync work queue: pending rows in breadth-first order.
+CREATE INDEX IF NOT EXISTS idx_crawl_queue ON crawl_state(status, depth, path);
 
 CREATE TABLE IF NOT EXISTS sync_checkpoint (
     key        TEXT PRIMARY KEY,

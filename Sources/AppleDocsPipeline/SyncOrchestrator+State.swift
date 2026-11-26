@@ -75,26 +75,6 @@ extension SyncOrchestrator {
         return try db.changes() > 0
     }
 
-    static func dequeuePendingBatch(
-        rootSlug: String,
-        maxDepth: Int,
-        limit: Int,
-        on db: SQLiteConnection
-    ) throws(SQLiteError) -> [(path: String, depth: Int)] {
-        let rows = try db.query(
-            """
-            SELECT path, depth FROM crawl_state
-            WHERE root_slug = ? AND status = 'pending' AND depth <= ?
-            ORDER BY depth ASC, path ASC
-            LIMIT ?
-            """,
-            bindings: [.text(rootSlug), .integer(Int64(maxDepth)), .integer(Int64(max(1, limit)))]
-        )
-        return try rows.map { row throws(SQLiteError) in
-            (try row.text(at: 0), Int(try row.integer(at: 1)))
-        }
-    }
-
     static func markState(
         path: String,
         status: String,

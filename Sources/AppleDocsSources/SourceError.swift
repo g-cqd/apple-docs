@@ -6,4 +6,6 @@ public enum SourceError: Error, Hashable, Sendable {
     case retryExhausted(url: String, lastStatus: Int?)
     case networkFailure(String)
     case unknownSource(String)
+    /// An upstream payload that does not have the expected shape.
+    case malformedPayload(url: String, reason: String)
 }

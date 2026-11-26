@@ -48,7 +48,7 @@ extension SyncOrchestrator {
                         payload: payload,
                         etag: etag,
                         discoveredKeys: discoveredKeys,
-                        depth: entry.depth,
+                        entry: entry,
                         context: context
                     )
                     counters.modified += 1
@@ -63,26 +63,27 @@ extension SyncOrchestrator {
         payload: SourcePayload,
         etag: String?,
         discoveredKeys: [DocumentKey],
-        depth: Int,
+        entry: FetchedEntry,
         context: RunContext
     ) throws -> Int {
         let key = payload.key
         let db = context.store.connection
         let converted = try SyncPipeline.persist(payload, into: context.store)
-        if let etag, !etag.isEmpty {
-            try writeCheckpoint(key: "etag:\(key.rawValue)", value: etag, on: db)
-        }
         try clearTombstoneCounter(forKey: key, on: db)
         var added = 0
-        if depth < context.options.maxDepth {
+        if entry.depth < context.options.maxDepth {
             for child in converted.discoveredKeys + discoveredKeys {
-                if context.options.stayWithinSeedRoot, child.rootSlug != context.rootSlug { continue }
-                if try enqueue(path: child.rawValue, rootSlug: context.rootSlug, depth: depth + 1, on: db) {
+                if context.options.stayWithinSeedRoot, child.rootSlug != entry.rootSlug { continue }
+                if try enqueue(path: child.rawValue, rootSlug: entry.rootSlug, depth: entry.depth + 1, on: db) {
                     added += 1
                 }
             }
         }
-        try markState(path: key.rawValue, status: "done", error: nil, on: db)
+        try db.execute(
+            "UPDATE crawl_state SET status = 'done', error = NULL, etag = ? WHERE path = ?",
+            bindings: [.optionalText(etag.flatMap { $0.isEmpty ? nil : $0 }), .text(entry.path)]
+        )
+        try deleteCheckpoint(key: "etag:\(key.rawValue)", on: db)
         return added
     }
 }

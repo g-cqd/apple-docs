@@ -37,6 +37,31 @@ public final class CorpusStore {
     }
 
     /// Upserts a documentation root entry.
+    /// Upserts a root found by catalog discovery with Bun's `upsertRoot` semantics: the display name and source type
+    /// follow the catalog, a known kind replaces the stored one (`unknown` never does), the seed path is only filled
+    /// in, and crawl state (page count, status, index ETag) is untouched.
+    // @dl:disable -- a different conflict policy from upsertRoot (catalog merge vs full replace)
+    public func upsertDiscoveredRoot(_ root: CorpusRootRecord) throws(SQLiteError) {
+        try connection.execute(
+            """
+            INSERT INTO roots (slug, display_name, kind, source_type, seed_path, status, last_seen)
+            VALUES (?, ?, ?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(slug) DO UPDATE SET
+                display_name = excluded.display_name,
+                kind = CASE WHEN excluded.kind != 'unknown' THEN excluded.kind ELSE roots.kind END,
+                source_type = excluded.source_type,
+                seed_path = COALESCE(excluded.seed_path, roots.seed_path),
+                last_seen = excluded.last_seen,
+                updated_at = datetime('now')
+            """,
+            bindings: [
+                .text(root.slug), .text(root.displayName), .text(root.kind), .text(root.sourceType.rawValue),
+                .optionalText(root.seedPath)
+            ]
+        )
+    }
+    // @dl:enable
+
     public func upsertRoot(_ root: CorpusRootRecord) throws(SQLiteError) {
         try connection.execute(
             """

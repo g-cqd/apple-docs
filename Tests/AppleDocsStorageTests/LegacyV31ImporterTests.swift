@@ -42,6 +42,18 @@ struct LegacyV31ImporterTests {
         )
         #expect(ftsRows.count == 1)
 
+        // Page validators and the last full sweep carry over, so the first Swift sync revalidates instead of refetching.
+        let crawl = try #require(
+            try destination.connection.queryOne("SELECT path, status, etag, last_modified, depth FROM crawl_state")
+        )
+        #expect(try crawl.text(at: 0) == "swiftui/view" && crawl.text(at: 1) == "done")
+        #expect(try crawl.optionalText(at: 2) == "\"e-view\"")
+        #expect(try crawl.optionalText(at: 3) == "Tue, 02 Jun 2026 21:22:28 GMT" && crawl.integer(at: 4) == 1)
+        let sweep = try destination.connection.queryOne(
+            "SELECT value FROM sync_checkpoint WHERE key = 'docc_full_sweep_at'"
+        )
+        #expect(try sweep?.text(at: 0) == "2026-08-05T17:14:30.390Z")
+
         let bodyRows = try destination.connection.query(
             "SELECT rowid FROM documents_body_fts WHERE documents_body_fts MATCH 'hierarchy'"
         )
@@ -75,6 +87,7 @@ struct LegacyV31ImporterTests {
     private static let syntheticV31DocsSQL = """
         CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         INSERT INTO schema_meta VALUES ('schema_version', '31');
+        INSERT INTO schema_meta VALUES ('docc_full_sweep_at', '2026-08-05T17:14:30.390Z');
 
         CREATE TABLE roots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +100,15 @@ struct LegacyV31ImporterTests {
         );
         INSERT INTO roots (slug, display_name, kind, page_count, seed_path, source_type)
         VALUES ('swiftui', 'SwiftUI', 'framework', 1, 'swiftui', 'apple-docc');
+
+        CREATE TABLE pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, root_id INTEGER NOT NULL, path TEXT NOT NULL UNIQUE,
+            url TEXT NOT NULL, etag TEXT, last_modified TEXT, status TEXT NOT NULL DEFAULT 'active',
+            url_depth INTEGER DEFAULT 0
+        );
+        INSERT INTO pages (root_id, path, url, etag, last_modified, url_depth)
+        VALUES (1, 'swiftui/View', 'https://developer.apple.com/documentation/swiftui/view', '"e-view"',
+                'Tue, 02 Jun 2026 21:22:28 GMT', 1);
 
         CREATE TABLE documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -87,6 +87,41 @@ Process-lifetime globals therefore keep such values serialized (`MCPToolDescript
 and materializes them per `tools/list`) instead of suppressing the report. Revisit when a toolchain stops reporting
 the program above.
 
+## Compiler issues
+
+Swift 6.4.2 (macOS) and 6.4.3 (Linux) release builds lose task-group results when a child closure returns an
+expression containing `try await` inside a typed `do throws(E)` block and one child throws: only the throwing
+child's result reaches the group. Binding the awaited value first, or calling a function that returns the `Result`,
+is correct. Minimal reproduction:
+
+```swift
+enum FetchError: Error { case failed }
+func fetch(_ slug: String) async throws(FetchError) -> Int {
+    if slug == "bad" { throw .failed }
+    try? await Task.sleep(for: .milliseconds(5))
+    return slug.count
+}
+let slugs = ["a", "bb", "bad", "ccc"]
+let seen = await withTaskGroup(of: (String, Result<Int, FetchError>).self) { group in
+    for slug in slugs {
+        group.addTask {
+            do throws(FetchError) {
+                return (slug, .success(try await fetch(slug)))  // release: other children's results are lost
+            } catch {
+                return (slug, .failure(error))
+            }
+        }
+    }
+    var seen: [String] = []
+    for await item in group { seen.append(item.0) }
+    return seen
+}
+print(seen.sorted())  // debug: ["a", "bad", "bb", "ccc"]; release: ["bad"]
+```
+
+`RootIndexGate` wraps the fetch in a function returning `Result`, and `CorpusSyncTests` covers a failing root among
+succeeding ones, which fails under `swift test -c release` with the affected pattern (the CI release test jobs).
+
 ## Other gates
 
 `Scripts/dependency-audit.sh` (declared vs imported target dependencies), `Scripts/check-layers.py` (ADR-0001
