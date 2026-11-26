@@ -6,11 +6,29 @@ import Foundation
 
 /// Cross-platform `URLSession`-backed ``UpstreamHTTPTransport`` (macOS `Foundation` + Linux `FoundationNetworking`)
 /// with bounded body size enforcement and clean `ETag`/`Last-Modified`/`Retry-After` header extraction.
+///
+/// Uses a dedicated **ephemeral, cache-less** session: conditional requests (`If-None-Match`) must reach the
+/// origin so `304 Not Modified` is observed by the sync orchestrator instead of being silently answered by a
+/// local `URLCache`, and the per-host connection cap is raised so bounded crawl concurrency is not throttled
+/// by the platform default of 6 connections per host.
 public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable {
     private let userAgent: String
+    private let session: URLSession
 
-    public init(userAgent: String = "apple-docs-swift/2.0") {
+    public init(userAgent: String = "apple-docs-swift/2.0", maxConnectionsPerHost: Int = 32) {
         self.userAgent = userAgent
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpMaximumConnectionsPerHost = max(1, min(maxConnectionsPerHost, 64))
+        configuration.timeoutIntervalForRequest = 30
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        self.session = URLSession(configuration: configuration)
+    }
+
+    deinit {
+        session.finishTasksAndInvalidate()
     }
 
     public func fetch(_ request: UpstreamFetchRequest) async throws(SourceError) -> UpstreamFetchResponse {
@@ -19,7 +37,6 @@ public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable 
         }
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
-        urlRequest.timeoutInterval = 30
         urlRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         urlRequest.setValue(request.accept, forHTTPHeaderField: "Accept")
         if let etag = request.ifNoneMatch, !etag.isEmpty {
@@ -32,7 +49,7 @@ public final class URLSessionUpstreamTransport: UpstreamHTTPTransport, Sendable 
         let data: Data
         let rawResponse: URLResponse
         do {
-            (data, rawResponse) = try await URLSession.shared.data(for: urlRequest)
+            (data, rawResponse) = try await session.data(for: urlRequest)
         } catch {
             throw .networkFailure(String(describing: error))
         }

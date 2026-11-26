@@ -6,10 +6,10 @@ extension PublicDocumentDetail {
     public func section(named heading: String) -> Section? {
         let needle = heading.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }
-        if let exact = sections.first(where: { $0.heading?.lowercased() == needle }) {
+        if let exact = bodySections.first(where: { $0.heading?.lowercased() == needle }) {
             return exact
         }
-        return sections.first(where: { $0.heading?.lowercased().contains(needle) == true })
+        return bodySections.first(where: { $0.heading?.lowercased().contains(needle) == true })
     }
 
     /// Renders either the whole document or a single heading-matched section into Markdown.
@@ -50,7 +50,7 @@ extension PublicDocumentDetail {
         if let declaration = document.declaration, !declaration.isEmpty {
             chunks.append(("Declaration", declaration))
         }
-        for section in sections {
+        for section in bodySections {
             chunks.append((section.heading, section.content))
         }
 

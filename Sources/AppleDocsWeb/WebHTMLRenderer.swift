@@ -32,7 +32,7 @@ public enum WebHTMLRenderer: Sendable {
         if let declaration = detail.document.declaration, !declaration.isEmpty {
             bodyParts.append("<pre><code>\(escapeHTML(declaration))</code></pre>")
         }
-        for section in detail.sections {
+        for section in detail.bodySections {
             if let heading = section.heading, !heading.isEmpty {
                 bodyParts.append("<h2>\(escapeHTML(heading))</h2>")
             }

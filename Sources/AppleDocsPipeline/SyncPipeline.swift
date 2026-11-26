@@ -21,24 +21,16 @@ public enum SyncPipeline: Sendable {
         root: CorpusRootRecord,
         into store: CorpusStore
     ) throws -> IngestReport {
-        var docCount = 0
-        var sectionCount = 0
-        var relCount = 0
+        var totals = (documents: 0, sections: 0, relationships: 0)
         var failureCount = 0
-
         try store.connection.transaction {
             try store.upsertRoot(root)
             for payload in payloads {
                 do {
-                    let converted = try convert(payload)
-                    let docID = try store.upsertDocument(converted.document)
-                    try store.replaceSections(forDocumentID: docID, sections: converted.sections)
-                    for relationship in converted.relationships {
-                        try store.upsertRelationship(relationship)
-                        relCount += 1
-                    }
-                    docCount += 1
-                    sectionCount += converted.sections.count
+                    let converted = try persist(payload, into: store)
+                    totals.documents += 1
+                    totals.sections += converted.sections.count
+                    totals.relationships += converted.relationships.count
                 } catch {
                     failureCount += 1
                 }
@@ -49,15 +41,27 @@ public enum SyncPipeline: Sendable {
                 VALUES (?, ?, datetime('now'))
                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
                 """,
-                bindings: [.text("root:\(root.slug):last_count"), .text(String(docCount))]
+                bindings: [.text("root:\(root.slug):last_count"), .text(String(totals.documents))]
             )
         }
         return IngestReport(
-            documentsIngested: docCount,
-            sectionsIngested: sectionCount,
-            relationshipsIngested: relCount,
+            documentsIngested: totals.documents,
+            sectionsIngested: totals.sections,
+            relationshipsIngested: totals.relationships,
             failures: failureCount
         )
+    }
+
+    /// Converts one payload and writes its document, sections, and relationships (caller owns the transaction).
+    @discardableResult
+    static func persist(_ payload: SourcePayload, into store: CorpusStore) throws -> ConvertedDocument {
+        let converted = try convert(payload)
+        let docID = try store.upsertDocument(converted.document)
+        try store.replaceSections(forDocumentID: docID, sections: converted.sections)
+        for relationship in converted.relationships {
+            try store.upsertRelationship(relationship)
+        }
+        return converted
     }
 
     static func convert(_ payload: SourcePayload) throws -> ConvertedDocument {

@@ -7,15 +7,20 @@ public struct ConvertedDocument: Hashable, Sendable {
     public let document: DocumentRecord
     public let sections: [DocumentSectionRecord]
     public let relationships: [DocumentRelationshipRecord]
+    /// Every same-corpus page this document links to (structured sections plus inline references),
+    /// used by crawlers to enqueue further pages without re-parsing the payload.
+    public let discoveredKeys: [DocumentKey]
 
     public init(
         document: DocumentRecord,
         sections: [DocumentSectionRecord],
-        relationships: [DocumentRelationshipRecord] = []
+        relationships: [DocumentRelationshipRecord] = [],
+        discoveredKeys: [DocumentKey]? = nil
     ) {
         self.document = document
         self.sections = sections
         self.relationships = relationships
+        self.discoveredKeys = discoveredKeys ?? relationships.map(\.toKey)
     }
 
     /// Accumulates heading-delimited section paragraphs/blocks into ordered ``DocumentSectionRecord`` entries.

@@ -38,6 +38,29 @@ extension SyncOrchestrator {
         return rows.count
     }
 
+    static func seedQueue(root: CorpusRootRecord, seeds: [DocumentKey], into store: CorpusStore) throws {
+        try store.connection.transaction {
+            try store.upsertRoot(root)
+            for seed in seeds {
+                try enqueue(path: seed.rawValue, rootSlug: root.slug, depth: 0, on: store.connection)
+            }
+        }
+    }
+
+    /// Recomputes `roots.page_count` and adopts the seed page title as the root display name (Bun parity).
+    static func refreshRootStats(rootSlug: String, seedPath: String?, on db: SQLiteConnection) throws(SQLiteError) {
+        try db.execute(
+            """
+            UPDATE roots SET
+                page_count = (SELECT COUNT(*) FROM documents WHERE framework = ?1),
+                display_name = COALESCE((SELECT title FROM documents WHERE key = ?2), display_name),
+                updated_at = datetime('now')
+            WHERE slug = ?1
+            """,
+            bindings: [.text(rootSlug), .text(seedPath ?? rootSlug)]
+        )
+    }
+
     @discardableResult
     static func enqueue(
         path: String,
@@ -52,25 +75,24 @@ extension SyncOrchestrator {
         return try db.changes() > 0
     }
 
-    static func dequeueNextPending(
+    static func dequeuePendingBatch(
         rootSlug: String,
         maxDepth: Int,
+        limit: Int,
         on db: SQLiteConnection
-    ) throws(SQLiteError) -> (path: String, depth: Int)? {
-        guard
-            let row = try db.queryOne(
-                """
-                SELECT path, depth FROM crawl_state
-                WHERE root_slug = ? AND status = 'pending' AND depth <= ?
-                ORDER BY depth ASC, path ASC
-                LIMIT 1
-                """,
-                bindings: [.text(rootSlug), .integer(Int64(maxDepth))]
-            )
-        else {
-            return nil
+    ) throws(SQLiteError) -> [(path: String, depth: Int)] {
+        let rows = try db.query(
+            """
+            SELECT path, depth FROM crawl_state
+            WHERE root_slug = ? AND status = 'pending' AND depth <= ?
+            ORDER BY depth ASC, path ASC
+            LIMIT ?
+            """,
+            bindings: [.text(rootSlug), .integer(Int64(maxDepth)), .integer(Int64(max(1, limit)))]
+        )
+        return try rows.map { row throws(SQLiteError) in
+            (try row.text(at: 0), Int(try row.integer(at: 1)))
         }
-        return (try row.text(at: 0), Int(try row.integer(at: 1)))
     }
 
     static func markState(

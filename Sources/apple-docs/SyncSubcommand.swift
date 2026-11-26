@@ -24,6 +24,9 @@ struct SyncSubcommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum crawl link depth.")
     var maxDepth = 2
 
+    @Option(name: .long, help: "Concurrent in-flight HTTP requests (1-64).")
+    var concurrency = 16
+
     @Option(name: .long, help: "Target Swift v1 corpus database path.")
     var db: String?
 
@@ -50,7 +53,11 @@ struct SyncSubcommand: AsyncParsableCommand {
             seeds: parsedSeeds,
             client: UpstreamHTTPClient(),
             into: store,
-            options: SyncOrchestrator.Options(maxPages: maxPages, maxDepth: maxDepth)
+            options: SyncOrchestrator.Options(
+                maxPages: maxPages,
+                maxDepth: maxDepth,
+                concurrency: concurrency
+            )
         )
         print(
             "Synced \(report.source.rawValue): modified=\(report.fetchedModified), 304=\(report.skippedNotModified), tombstoned=\(report.tombstoned), discovered=\(report.discoveredQueued), errors=\(report.errors)"

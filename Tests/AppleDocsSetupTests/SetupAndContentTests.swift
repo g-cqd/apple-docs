@@ -137,8 +137,9 @@ struct SetupAndContentTests {
         #expect(docc.document.isBeta)
         #expect(docc.document.declarationText == "struct NavigationStack")
         #expect(docc.document.abstractText == "A view that displays a root view with `NavigationPath`")
-        #expect(docc.sections.count == 1)
-        #expect(docc.sections[0].heading == "Overview")
+        #expect(docc.sections.map(\.sectionKind) == ["abstract", "declaration", "discussion"])
+        #expect(docc.sections[2].heading == "Overview")
+        #expect(docc.sections[2].contentText == "Push destinations cleanly.")
     }
 
     @Test func `converts HTML pages via AemiHTML while stripping chrome and hidden prompt injections`() throws {

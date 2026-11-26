@@ -1,5 +1,4 @@
 import AemiRegex
-import AppleDocsContent
 public import AppleDocsCore
 
 /// Unified, data-driven upstream source adapter powering all 11 Apple & Swift documentation sources
@@ -74,20 +73,7 @@ public struct WebSourceAdapter: SourceAdapter, Sendable {
             encoding: spec.encoding,
             body: response.body
         )
-        let discovered: [DocumentKey] =
-            if spec.encoding == .doccJSON,
-                let converted = try? DocCJSONConverter.convert(
-                    json: response.body,
-                    key: key,
-                    sourceType: spec.kind,
-                    url: url
-                )
-            {
-                converted.relationships.map(\.toKey)
-            } else {
-                []
-            }
-        return .modified(payload: payload, etag: response.etag, discoveredKeys: discovered)
+        return .modified(payload: payload, etag: response.etag, discoveredKeys: [])
     }
 
     /// Detects whether a DocC path segment looks like a Swift operator slug (e.g. `._(_:_:)`)

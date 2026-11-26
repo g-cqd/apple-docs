@@ -144,6 +144,9 @@ struct Phase3SyncTests {
         #expect(run1.discoveredQueued == 1)
         #expect(try store.documentCount() == 2)
         #expect(try store.outgoingRelationships(from: seed).count == 1)
+        let rootRow = try #require(try store.listRoots().first { $0.slug == "swiftui" })
+        #expect(rootRow.pageCount == 2)
+        #expect(rootRow.displayName == "NavigationStack")
 
         // Build binary embeddings for both documents
         let tokJSON = """

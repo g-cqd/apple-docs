@@ -5,6 +5,9 @@ import Foundation
 /// Parses Apple DocC JSON render nodes (`metadata`, `abstract`, `primaryContentSections`,
 /// `topicSections`, `relationshipsSections`, `seeAlsoSections`, `references`, `platforms`, `identifier`)
 /// into normalized ``ConvertedDocument`` values via `g-cqd/AemiJSON`'s zero-copy tape parser.
+///
+/// Section kinds and ordering follow the Bun corpus model (see ``DocCSectionExtractor``) so imported
+/// v31 corpora and freshly crawled Swift corpora render and search identically.
 public enum DocCJSONConverter: Sendable {
     private static let externalIDPrefix = "doc://com.externally.resolved.symbol/"
 
@@ -16,40 +19,42 @@ public enum DocCJSONConverter: Sendable {
         url: String? = nil
     ) throws -> ConvertedDocument {
         let root = try AemiJSON.parse(bytes).root
+        let refs = root["references"]
         let metadata = root["metadata"]
-        let title = metadata["title"].string ?? key.rawValue
-        let roleHeading = metadata["roleHeading"].string
-        let role = metadata["role"].string
-        let symbolKind = metadata["symbolKind"].string ?? root["kind"].string
-        let language = root["identifier"]["interfaceLanguage"].string
-        let usr = metadata["externalID"].string
-        let abstractText = flattenInlineText(root["abstract"])
-        let availability = parsePlatforms(metadata["platforms"])
+        let extraction = DocCSectionExtractor.extract(from: root, refs: refs)
+        let abstractText = DocCContentRenderer.renderInline(root["abstract"], refs: refs)
         let flags = parsePlatformFlags(metadata["platforms"])
-        let (declarationText, sections) = parsePrimarySections(root["primaryContentSections"])
-        let relationships = extractRelationships(from: root, sourceKey: key)
+        let headings = extraction.sections
+            .filter { $0.sectionKind == "discussion" }
+            .compactMap(\.heading)
+            .joined(separator: "\n")
 
-        let headings = sections.compactMap(\.heading).filter { !$0.isEmpty }.joined(separator: "\n")
         let document = DocumentRecord(
             key: key,
             sourceType: sourceType,
-            title: title,
-            kind: symbolKind,
-            role: role,
-            roleHeading: roleHeading,
+            title: metadata["title"].string ?? key.rawValue,
+            kind: metadata["symbolKind"].string ?? root["kind"].string,
+            role: metadata["role"].string,
+            roleHeading: metadata["roleHeading"].string,
             framework: key.rootSlug,
             url: url,
-            language: language,
-            usr: usr,
+            language: root["identifier"]["interfaceLanguage"].string,
+            usr: metadata["externalID"].string,
             abstractText: abstractText.isEmpty ? nil : abstractText,
-            declarationText: declarationText,
+            declarationText: extraction.declaration,
             headings: headings.isEmpty ? nil : headings,
-            availability: availability,
+            availability: parsePlatforms(metadata["platforms"]),
             isDeprecated: flags.deprecated,
             isBeta: flags.beta,
             urlDepth: max(0, key.rawValue.split(separator: "/").count - 1)
         )
-        return ConvertedDocument(document: document, sections: sections, relationships: relationships)
+        let relationships = extractRelationships(from: root, refs: refs, sourceKey: key)
+        return ConvertedDocument(
+            document: document,
+            sections: extraction.sections,
+            relationships: relationships,
+            discoveredKeys: discoverKeys(relationships: relationships, refs: refs, sourceKey: key)
+        )
     }
 
     /// Normalizes a DocC URL or `doc://` identifier into a canonical ``DocumentKey``, if valid.
@@ -63,68 +68,89 @@ public enum DocCJSONConverter: Sendable {
         } else {
             return nil
         }
-        let cleaned = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let withoutFragment = trimmed.split(separator: "#", maxSplits: 1).first.map(String.init) ?? trimmed
+        let cleaned = withoutFragment.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !cleaned.isEmpty else { return nil }
         return try? DocumentKey(cleaned)
     }
 
-    private static func extractRelationships(from root: JSON, sourceKey: DocumentKey) -> [DocumentRelationshipRecord] {
-        let refs = root["references"]
+    private static func extractRelationships(
+        from root: JSON,
+        refs: JSON,
+        sourceKey: DocumentKey
+    ) -> [DocumentRelationshipRecord] {
         var edges: [DocumentRelationshipRecord] = []
         var seen: Set<String> = []
-
-        func appendGroup(_ sectionsNode: JSON, relationType: String) {
-            guard let groups = sectionsNode.array else { return }
-            for group in groups {
-                let groupTitle = group["title"].string
-                let kind = group["type"].string ?? relationType
-                guard let ids = group["identifiers"].array else { continue }
-                for idNode in ids {
-                    guard let id = idNode.string, !id.hasPrefix(externalIDPrefix) else { continue }
+        let groupsByType: [(JSON, String)] = [
+            (root["topicSections"], "topic"),
+            (root["relationshipsSections"], "relationship"),
+            (root["seeAlsoSections"], "see-also")
+        ]
+        for (sectionsNode, defaultType) in groupsByType {
+            for group in sectionsNode.array ?? [] {
+                let kind = group["type"].string ?? defaultType
+                for id in (group["identifiers"].array ?? []).compactMap(\.string) where !id.hasPrefix(externalIDPrefix)
+                {
                     let candidate = refs[id]["url"].string ?? id
-                    guard let targetKey = normalizeReferenceKey(candidate), targetKey != sourceKey else { continue }
-                    let dedup = "\(targetKey.rawValue)|\(kind)"
-                    guard seen.insert(dedup).inserted else { continue }
+                    guard let target = normalizeReferenceKey(candidate), target != sourceKey,
+                        seen.insert("\(target.rawValue)|\(kind)").inserted
+                    else {
+                        continue
+                    }
                     edges.append(
                         DocumentRelationshipRecord(
                             fromKey: sourceKey,
-                            toKey: targetKey,
+                            toKey: target,
                             relationType: kind,
-                            section: groupTitle,
+                            section: group["title"].string,
                             sortOrder: edges.count
                         )
                     )
                 }
             }
         }
-
-        appendGroup(root["topicSections"], relationType: "topic")
-        appendGroup(root["relationshipsSections"], relationType: "relationship")
-        appendGroup(root["seeAlsoSections"], relationType: "see-also")
         return edges
     }
 
+    /// Structured relationship targets plus Bun's catch-all sweep of the `references` map: inline `topic`
+    /// references under `/documentation/` that carry a non-empty abstract (empty-abstract entries are Apple's
+    /// stale duplicates whose data files 404).
+    private static func discoverKeys(
+        relationships: [DocumentRelationshipRecord],
+        refs: JSON,
+        sourceKey: DocumentKey
+    ) -> [DocumentKey] {
+        var seen = Set(relationships.map(\.toKey.rawValue))
+        var keys = relationships.map(\.toKey)
+        guard let entries = refs.object else { return keys }
+        for (id, ref) in entries where !id.hasPrefix(externalIDPrefix) {
+            guard ref["type"].string == "topic", let url = ref["url"].string, url.contains("/documentation/"),
+                let abstract = ref["abstract"].array, !abstract.isEmpty,
+                let key = normalizeReferenceKey(url), key != sourceKey, seen.insert(key.rawValue).inserted
+            else {
+                continue
+            }
+            keys.append(key)
+        }
+        return keys
+    }
+
     private static func parsePlatforms(_ node: JSON) -> PlatformAvailability {
-        guard let items = node.array else { return .none }
-        var ios: String?
-        var macos: String?
-        var watchos: String?
-        var tvos: String?
-        var visionos: String?
-        for item in items {
+        var versions: [String: String] = [:]
+        for item in node.array ?? [] {
             guard let name = item["name"].string?.lowercased(), let introduced = item["introducedAt"].string else {
                 continue
             }
-            switch name {
-                case "ios", "ipados": ios = ios ?? introduced
-                case "macos": macos = macos ?? introduced
-                case "watchos": watchos = watchos ?? introduced
-                case "tvos": tvos = tvos ?? introduced
-                case "visionos": visionos = visionos ?? introduced
-                default: continue
-            }
+            let canonical = name == "ipados" ? "ios" : name
+            if versions[canonical] == nil { versions[canonical] = introduced }
         }
-        return PlatformAvailability(ios: ios, macos: macos, watchos: watchos, tvos: tvos, visionos: visionos)
+        return PlatformAvailability(
+            ios: versions["ios"],
+            macos: versions["macos"],
+            watchos: versions["watchos"],
+            tvos: versions["tvos"],
+            visionos: versions["visionos"]
+        )
     }
 
     private static func parsePlatformFlags(_ node: JSON) -> (deprecated: Bool, beta: Bool) {
@@ -132,89 +158,5 @@ public enum DocCJSONConverter: Sendable {
         let anyDeprecated = items.contains { $0["deprecated"].bool == true || $0["deprecatedAt"].string != nil }
         let anyBeta = items.contains { $0["beta"].bool == true }
         return (anyDeprecated, anyBeta)
-    }
-
-    private static func parsePrimarySections(_ node: JSON) -> (String?, [DocumentSectionRecord]) {
-        guard let items = node.array else { return (nil, []) }
-        var declaration: String?
-        var sections: [DocumentSectionRecord] = []
-        for item in items {
-            let kind = item["kind"].string ?? "content"
-            if kind == "declarations", declaration == nil {
-                declaration = extractDeclaration(item["declarations"])
-            } else if kind == "parameters", let params = item["parameters"].array {
-                let lines = params.compactMap { param -> String? in
-                    guard let name = param["name"].string else { return nil }
-                    let desc = extractContentSections(param["content"].array ?? [], startingOrder: 0)
-                        .map(\.contentText)
-                        .joined(separator: " ")
-                    return "- `\(name)`: \(desc)"
-                }
-                if !lines.isEmpty {
-                    sections.append(
-                        DocumentSectionRecord(
-                            sectionKind: "parameters",
-                            heading: "Parameters",
-                            contentText: lines.joined(separator: "\n"),
-                            sortOrder: sections.count
-                        )
-                    )
-                }
-            } else if kind == "content", let blocks = item["content"].array {
-                sections.append(contentsOf: extractContentSections(blocks, startingOrder: sections.count))
-            }
-        }
-        return (declaration, sections)
-    }
-
-    private static func extractDeclaration(_ declarations: JSON) -> String? {
-        guard let first = declarations.array?.first, let tokens = first["tokens"].array else { return nil }
-        let joined = tokens.compactMap { $0["text"].string }.joined()
-        return joined.isEmpty ? nil : joined
-    }
-
-    private static func extractContentSections(_ blocks: [JSON], startingOrder: Int) -> [DocumentSectionRecord] {
-        var builder = ConvertedDocument.SectionBuilder(startingOrder: startingOrder)
-        for block in blocks {
-            switch block["type"].string ?? "" {
-                case "heading":
-                    builder.startSection(heading: block["text"].string)
-                case "paragraph":
-                    builder.appendBlock(flattenInlineText(block["inlineContent"]))
-                case "aside":
-                    let style = (block["style"].string ?? "note").capitalized
-                    let inner = extractContentSections(block["content"].array ?? [], startingOrder: 0)
-                        .map(\.contentText)
-                        .joined(separator: "\n")
-                    if !inner.isEmpty { builder.appendBlock("> **\(style):** \(inner)") }
-                case "codeListing":
-                    let syntax = block["syntax"].string ?? ""
-                    let code = (block["code"].array ?? []).compactMap(\.string).joined(separator: "\n")
-                    if !code.isEmpty { builder.appendBlock("```\(syntax)\n\(code)\n```") }
-                default:
-                    continue
-            }
-        }
-        return builder.finish()
-    }
-
-    private static func flattenInlineText(_ node: JSON) -> String {
-        guard let items = node.array else { return "" }
-        var parts: [String] = []
-        for item in items {
-            switch item["type"].string ?? "" {
-                case "text":
-                    if let text = item["text"].string { parts.append(text) }
-                case "codeVoice":
-                    if let code = item["code"].string { parts.append("`\(code)`") }
-                case "reference":
-                    if let title = item["overridingTitle"].string ?? item["identifier"].string {
-                        parts.append(title)
-                    }
-                default:
-                    continue
-            }
-        }
-        return parts.joined()
     }
 }

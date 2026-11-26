@@ -18,6 +18,15 @@ public struct PublicDocumentDetail: Hashable, Sendable, Codable {
     public let document: PublicDocumentMetadata
     public let sections: [Section]
 
+    /// Section kinds already rendered from document metadata (abstract, declaration) and therefore
+    /// excluded from body rendering to avoid duplicated content.
+    public static let metadataSectionKinds: Set<String> = ["abstract", "declaration"]
+
+    /// Sections that form the page body (everything except metadata-derived kinds).
+    public var bodySections: [Section] {
+        sections.filter { !Self.metadataSectionKinds.contains($0.kind) }
+    }
+
     public init(document: DocumentRecord, sections: [DocumentSectionRecord]) {
         self.document = PublicDocumentMetadata(from: document)
         self.sections = sections.map(Section.init)
@@ -41,7 +50,7 @@ public struct PublicDocumentDetail: Hashable, Sendable, Codable {
             lines.append(declaration)
             lines.append("```")
         }
-        for section in sections {
+        for section in bodySections {
             lines.append("")
             if let heading = section.heading, !heading.isEmpty {
                 lines.append("## \(heading)")
