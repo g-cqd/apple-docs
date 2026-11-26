@@ -14,6 +14,8 @@ public struct DocumentRecord: Hashable, Sendable, Codable {
     public let declarationText: String?
     public let headings: String?
     public let availability: PlatformAvailability
+    /// Every introduced platform (`{"ios":"16.0","ipados":"16.0",…}` in source order), as Bun stores it.
+    public let platformsJSON: String?
     public let isDeprecated: Bool
     public let isBeta: Bool
     public let isReleaseNotes: Bool
@@ -36,6 +38,7 @@ public struct DocumentRecord: Hashable, Sendable, Codable {
         declarationText: String? = nil,
         headings: String? = nil,
         availability: PlatformAvailability = .none,
+        platformsJSON: String? = nil,
         isDeprecated: Bool = false,
         isBeta: Bool = false,
         isReleaseNotes: Bool = false,
@@ -57,6 +60,7 @@ public struct DocumentRecord: Hashable, Sendable, Codable {
         self.declarationText = declarationText
         self.headings = headings
         self.availability = availability
+        self.platformsJSON = platformsJSON
         self.isDeprecated = isDeprecated
         self.isBeta = isBeta
         self.isReleaseNotes = isReleaseNotes

@@ -189,7 +189,7 @@ public enum CorpusSearchEngine: Sendable {
     {
         let documentID = try row.integer(at: 0)
         let document = try CorpusStore.decodeDocument(row, offset: 1)
-        let scoreCell = try row.value(at: 25)
+        let scoreCell = try row.value(at: 1 + CorpusStore.documentColumnCount)
         let score = scoreCell.realValue ?? Double(scoreCell.integerValue ?? 0)
         return CorpusSearchHit(
             documentID: documentID,

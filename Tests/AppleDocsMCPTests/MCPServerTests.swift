@@ -102,7 +102,7 @@ struct MCPServerTests {
             #"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_apple_fonts","arguments":{}}}"#
         let fontResp = try #require(await dispatcher.handleRawPayload(Array(fontCall.utf8)))
         let fontText = String(decoding: fontResp, as: UTF8.self)
-        #expect(fontText.contains("SF Pro"))
+        #expect(fontText.contains("sf-pro"))  // Bun's projection keeps family ids, not display names
         #expect(!fontText.contains("/Users/"))
     }
 
@@ -184,6 +184,8 @@ struct MCPServerTests {
             """
             INSERT INTO sf_symbols (name, scope, keywords_json, categories_json, codepoint)
             VALUES ('star.fill', 'public', '["favorite"]', '["objectsandtools"]', 1048576);
+            INSERT INTO sf_symbols_fts (rowid, name, keywords, categories, aliases)
+            SELECT rowid, name, 'favorite', 'objectsandtools', '' FROM sf_symbols WHERE name = 'star.fill';
             INSERT INTO apple_font_families (id, display_name, category, status)
             VALUES ('sf-pro', 'SF Pro', 'system', 'available');
             INSERT INTO apple_font_files (id, family_id, file_name, file_path, format)

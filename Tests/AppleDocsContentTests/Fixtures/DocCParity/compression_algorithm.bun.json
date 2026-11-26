@@ -309,5 +309,6 @@
    "section": "Objects that simplify multiple-step compression",
    "sortOrder": 15
   }
- ]
+ ],
+ "markdown": "---\ntitle: Algorithm\nframework: compression\nrole: symbol\nrole_heading: Enumeration\nplatforms: [iOS 13.0+, iPadOS 13.0+, Mac Catalyst 13.0+, macOS 10.15+, tvOS 13.0+, watchOS 6.0+]\npath: compression/algorithm\n---\n\n# Algorithm\n\nAlgorithms used for compression or decompression.\n\n## Declaration\n\n```swift\nenum Algorithm\n```\n\n## Topics\n\n### Enumeration Cases\n\n- [Algorithm.brotli](compression/algorithm/brotli.md)\n- [Algorithm.lz4](compression/algorithm/lz4.md)\n- [Algorithm.lzbitmap](compression/algorithm/lzbitmap.md)\n- [Algorithm.lzfse](compression/algorithm/lzfse.md)\n- [Algorithm.lzma](compression/algorithm/lzma.md)\n- [Algorithm.zlib](compression/algorithm/zlib.md)\n\n## Relationships\n\n### Conforms To\n\n- [CaseIterable](swift/caseiterable.md)\n- [Equatable](swift/equatable.md)\n- [Hashable](swift/hashable.md)\n- [RawRepresentable](swift/rawrepresentable.md)\n\n## See Also\n\n### Objects that simplify multiple-step compression\n\n- [Compressing and decompressing data with input and output filters](accelerate/compressing-and-decompressing-data-with-input-and-output-filters.md)\n- [Compressing and decompressing files with stream compression](accelerate/compressing-and-decompressing-files-with-stream-compression.md)\n- [InputFilter](compression/inputfilter.md)\n- [OutputFilter](compression/outputfilter.md)\n- [FilterError](compression/filtererror.md)\n- [FilterOperation](compression/filteroperation.md)\n"
 }

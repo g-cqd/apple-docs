@@ -12,158 +12,120 @@ extension MCPServerDispatcher {
         guard let params, params.isObject, let name = params["name"].string else {
             return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Missing tool name."))
         }
-        let arguments = params["arguments"]
         do {
-            let text = try await invokeTool(name: name, arguments: arguments)
+            let payload = try await invokeTool(name: name, arguments: params["arguments"])
+            // Bun `createMcpTextResult`: the projected payload as compact JSON text plus `structuredContent`.
             return .success(
                 .object([
                     "content": .array([
-                        .object(["type": .string("text"), "text": .string(text)])
-                    ])
+                        .object(["type": .string("text"), "text": .string(JavaScriptJSON.stringify(payload))])
+                    ]),
+                    "structuredContent": payload
                 ])
             )
-        } catch let rpcError as JSONRPCError {
+        } catch let rpcError as JSONRPCError where rpcError.code == JSONRPCError.methodNotFound {
             return .failure(rpcError)
         } catch {
-            return .failure(JSONRPCError(code: JSONRPCError.internalError, message: "Tool execution failed."))
+            // Tool failures are results with `isError` (MCP SDK behaviour Bun relies on), not protocol errors.
+            return .success(Self.toolError(Self.message(for: error)))
         }
     }
 
-    private func invokeTool(name: String, arguments: JSON) async throws -> String {
+    static func toolError(_ message: String) -> JSONValue {
+        .object([
+            "content": .array([.object(["type": .string("text"), "text": .string(message)])]),
+            "isError": .bool(true)
+        ])
+    }
+
+    private static func message(for error: any Error) -> String {
+        switch error {
+            case let error as ToolPayloadError: error.message
+            case let error as MCPPaginationError: error.message
+            case let error as JSONRPCError: error.message
+            default: "Tool execution failed."
+        }
+    }
+
+    private func invokeTool(name: String, arguments: JSON) async throws -> JSONValue {
         switch name {
-            case "search_docs":
-                return try await invokeSearchDocs(arguments)
-            case "read_doc":
-                return try await invokeReadDoc(arguments)
+            case "search_docs": return try await invokeSearchDocs(arguments)
+            case "read_doc": return try await invokeReadDoc(arguments)
             case "list_frameworks":
-                return try await invokeListFrameworks(arguments)
-            case "browse":
-                return try await invokeBrowse(arguments)
+                let kind = arguments["kind"].string
+                let result = try await reader.withConnection { try ToolPayloads.frameworks(kind: kind, on: $0) }
+                return MCPPayloadProjection.frameworks(
+                    try paginated(result, field: "roots", arguments: arguments)
+                )
+            case "browse": return try await invokeBrowse(arguments)
             case "list_taxonomy":
-                return try await invokeListTaxonomy(arguments)
+                let field = arguments["field"].string
+                let all = arguments["all"].bool == true
+                return MCPPayloadProjection.taxonomy(
+                    try await reader.withConnection { try ToolPayloads.taxonomy(field: field, all: all, on: $0) }
+                )
             case "search_sf_symbols":
-                return try await invokeSearchSFSymbols(arguments)
+                let (query, scope, limit) = (
+                    arguments["query"].string, arguments["scope"].string, arguments["limit"].int
+                )
+                return MCPPayloadProjection.sfSymbols(
+                    try await reader.withConnection {
+                        try ToolPayloads.sfSymbols(query: query, scope: scope, limit: limit, on: $0)
+                    }
+                )
             case "list_apple_fonts":
-                return try await invokeListAppleFonts()
-            case "render_sf_symbol":
-                return try await invokeRenderSFSymbol(arguments)
-            case "render_font_text":
-                return try await invokeRenderFontText(arguments)
+                return MCPPayloadProjection.appleFonts(
+                    try await reader.withConnection { try ToolPayloads.appleFonts(on: $0) }
+                )
+            case "render_sf_symbol": return try Self.parsed(try await invokeRenderSFSymbol(arguments))
+            case "render_font_text": return try Self.parsed(try await invokeRenderFontText(arguments))
             default:
                 throw JSONRPCError(code: JSONRPCError.methodNotFound, message: "Unknown tool: \(name)")
         }
     }
 
-    private func invokeSearchDocs(_ args: JSON) async throws -> String {
-        let query = try requiredString(args, key: "query", tool: "search_docs")
-        let deprecated =
-            args["deprecated"].string
-            .flatMap(CorpusSearchRequest.DeprecatedFilter.init(rawValue:)) ?? .include
-        let minVer = args["minVersion"]
-        let availability = PlatformAvailability(
-            ios: minVer["ios"].string,
-            macos: minVer["macos"].string,
-            watchos: minVer["watchos"].string,
-            tvos: minVer["tvos"].string,
-            visionos: minVer["visionos"].string
-        )
-        let request = CorpusSearchRequest(
-            query: query,
+    private static func parsed(_ text: String) throws -> JSONValue {
+        JSONValue(try AemiJSON.parse(Array(text.utf8)).root)
+    }
+
+    private func invokeBrowse(_ args: JSON) async throws -> JSONValue {
+        let request = ToolPayloads.BrowseRequest(
             framework: args["framework"].string,
-            kind: args["kind"].string,
-            language: args["language"].string,
-            sources: CorpusQueryService.parseSourceKinds(args["source"].string),
-            deprecated: deprecated,
-            minVersions: availability,
-            limit: args["limit"].int ?? 25
+            path: args["path"].string,
+            year: args["year"].int,
+            limit: args["limit"].int
         )
-        let semantic = await reader.semanticResources()
-        let results = try await reader.withConnection { conn in
-            try CorpusQueryService.search(request, semantic: semantic, on: conn)
-        }
-        let encoded = try PublicProjection.encodeJSON(results)
-        if args["read"].bool == true, let top = results.first, let key = try? DocumentKey(top.path) {
-            if let detail = try await reader.withStore({ try CorpusQueryService.readDocument(key: key, on: $0) }) {
-                let topText = try formatDocumentOutput(detail: detail, args: args)
-                return "\(encoded)\n\n---\n\n\(topText)"
+        let result = try await reader.withConnection { try ToolPayloads.browse(request, on: $0) }
+        return MCPPayloadProjection.browse(
+            try paginated(result, field: args["path"].string == nil ? "pages" : "children", arguments: args)
+        )
+    }
+
+    /// `validatePaginationArgs` + `paginateArrayField` when `maxChars` is present.
+    func paginated(_ payload: JSONValue, field: String, arguments: JSON) throws -> JSONValue {
+        guard let maxChars = try Self.paginationArguments(arguments) else { return payload }
+        return try MCPPagination.paginateArrayField(
+            payload,
+            field: field,
+            maxChars: maxChars,
+            page: arguments["page"].int ?? 1
+        )
+    }
+
+    /// Validates `maxChars`/`page` like Bun's zod schema and `validatePaginationArgs`; `nil` when unpaginated.
+    static func paginationArguments(_ arguments: JSON) throws -> Int? {
+        let maxChars = arguments["maxChars"].int
+        if arguments["page"].exists, !arguments["page"].isNull {
+            guard let page = arguments["page"].int, (1 ... 10_000).contains(page) else {
+                throw ToolPayloadError("Invalid arguments: page must be an integer between 1 and 10000.")
             }
+            if maxChars == nil { throw ToolPayloadError("The page parameter requires maxChars.") }
         }
-        return encoded
-    }
-
-    private func invokeReadDoc(_ args: JSON) async throws -> String {
-        let pathArg = args["path"].string
-        let symbolArg = args["symbol"].string
-        let frameworkArg = args["framework"].string
-
-        let detail: PublicDocumentDetail? = try await reader.withStore { store in
-            if let pathArg {
-                let key = try DocumentKey(pathArg)
-                return try CorpusQueryService.readDocument(key: key, on: store)
-            }
-            if let symbolArg {
-                return try CorpusQueryService.readSymbol(named: symbolArg, framework: frameworkArg, on: store)
-            }
-            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "read_doc requires 'path' or 'symbol'.")
+        guard let maxChars else { return nil }
+        guard (MCPPagination.minMaxChars ... 100_000).contains(maxChars) else {
+            throw ToolPayloadError("Invalid arguments: maxChars must be an integer between 512 and 100000.")
         }
-        guard let detail else {
-            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Document not found.")
-        }
-        return try formatDocumentOutput(detail: detail, args: args)
-    }
-
-    private func formatDocumentOutput(detail: PublicDocumentDetail, args: JSON) throws -> String {
-        let matchObj = args["match"]
-        if matchObj.isObject, let matchQuery = matchObj["query"].string, !matchQuery.isEmpty {
-            let excerpts = detail.matchExcerpts(
-                query: matchQuery,
-                context: matchObj["context"].int ?? 140,
-                maxMatches: matchObj["max"].int ?? 5,
-                caseSensitive: matchObj["caseSensitive"].bool ?? false
-            )
-            return try PublicProjection.encodeJSON(excerpts)
-        }
-        let sectionHeading = args["section"].string
-        guard let markdown = detail.renderMarkdown(sectionHeading: sectionHeading) else {
-            throw JSONRPCError(
-                code: JSONRPCError.invalidParams,
-                message: "Section '\(sectionHeading ?? "")' not found."
-            )
-        }
-        if let maxChars = args["maxChars"].int {
-            let page = args["page"].int ?? 1
-            let slice = PublicProjection.paginate(markdown, maxChars: maxChars, page: page)
-            return "\(slice.text)\n\n<!-- page \(slice.page)/\(slice.totalPages) -->"
-        }
-        return markdown
-    }
-
-    private func invokeListFrameworks(_ args: JSON) async throws -> String {
-        let kind = args["kind"].string
-        let items = try await reader.withStore { store in
-            try CorpusQueryService.listFrameworks(kind: kind, on: store)
-        }
-        return try PublicProjection.encodeJSON(items)
-    }
-
-    private func invokeBrowse(_ args: JSON) async throws -> String {
-        let framework = try requiredString(args, key: "framework", tool: "browse")
-        let pathPrefix = args["path"].string
-        let limit = args["limit"].int ?? 100
-        return try await encodeFromPool { conn in
-            try CorpusQueryService.browse(framework: framework, pathPrefix: pathPrefix, limit: limit, on: conn)
-        }
-    }
-
-    private func invokeListTaxonomy(_ args: JSON) async throws -> String {
-        let fieldName = args["field"].string ?? "kind"
-        guard let field = CorpusQueryService.TaxonomyField(rawValue: fieldName) else {
-            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Unsupported taxonomy field: \(fieldName)")
-        }
-        let limit = (args["all"].bool == true) ? 500 : 20
-        return try await encodeFromPool { conn in
-            try CorpusQueryService.listTaxonomy(field: field, limit: limit, on: conn)
-        }
+        return maxChars
     }
 
     func requiredString(_ args: JSON, key: String, tool: String) throws(JSONRPCError) -> String {
@@ -171,12 +133,5 @@ extension MCPServerDispatcher {
             throw JSONRPCError(code: JSONRPCError.invalidParams, message: "\(tool) requires '\(key)'.")
         }
         return value
-    }
-
-    func encodeFromPool<T: Encodable & Sendable>(
-        _ query: @escaping @Sendable (SQLiteConnection) throws -> T
-    ) async throws -> String {
-        let value = try await reader.withConnection(query)
-        return try PublicProjection.encodeJSON(value)
     }
 }

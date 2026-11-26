@@ -124,7 +124,7 @@ extension MCPServerDispatcher {
         }
         let scope = String(parts[0])
         let size = query["size"].flatMap(Int.init) ?? 128
-        let color = query["color"] ?? query["fg"] ?? "currentColor"
+        let color = query["color"] ?? query["fg"] ?? "#000000"
         let background = query["background"] ?? query["bg"] ?? "transparent"
         let resourcesDir = reader.resourcesDirectory
         if format == "png" {

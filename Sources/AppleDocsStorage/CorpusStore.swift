@@ -29,8 +29,10 @@ public final class CorpusStore {
     public func upsertRoot(_ root: CorpusRootRecord) throws(SQLiteError) {
         try connection.execute(
             """
-            INSERT INTO roots (slug, display_name, kind, source_type, seed_path, page_count, status, index_etag)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO roots (
+                slug, display_name, kind, source_type, seed_path, page_count, status, index_etag, last_seen
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             ON CONFLICT(slug) DO UPDATE SET
                 display_name = excluded.display_name,
                 kind = excluded.kind,
@@ -39,6 +41,7 @@ public final class CorpusStore {
                 page_count = excluded.page_count,
                 status = excluded.status,
                 index_etag = COALESCE(excluded.index_etag, roots.index_etag),
+                last_seen = excluded.last_seen,
                 updated_at = datetime('now')
             """,
             bindings: [

@@ -50,8 +50,8 @@ enum DocCMetadata {
     }
 
     /// `resolvePlatforms`: lowercase platform slug → `introducedAt` (later entries win).
-    static func platforms(_ meta: JSON) -> [String: String] {
-        var map: [String: String] = [:]
+    static func platforms(_ meta: JSON) -> OrderedDictionary<String, String> {
+        var map: OrderedDictionary<String, String> = [:]
         for platform in meta["platforms"].array ?? [] {
             guard let introduced = platform["introducedAt"].string, !introduced.isEmpty,
                 let name = platform["name"].string

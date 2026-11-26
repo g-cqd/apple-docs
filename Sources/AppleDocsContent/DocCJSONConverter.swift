@@ -1,6 +1,7 @@
 import AemiJSONCore
 public import AppleDocsCore
 import Foundation
+import OrderedCollections
 
 /// Parses Apple DocC JSON render nodes (`metadata`, `abstract`, `primaryContentSections`,
 /// `topicSections`, `relationshipsSections`, `seeAlsoSections`, `references`, `platforms`, `identifier`)
@@ -54,6 +55,8 @@ public enum DocCJSONConverter: Sendable {
                 tvos: platforms["tvos"],
                 visionos: platforms["visionos"]
             ),
+            platformsJSON: platforms.isEmpty
+                ? nil : JSONValue.object(platforms.mapValues(JSONValue.string)).jsonText,
             isDeprecated: metadata["deprecated"].bool == true,
             isBeta: metadata["beta"].bool == true,
             isReleaseNotes: key.rawValue.contains("release-notes") || role == "releaseNotes",

@@ -33,10 +33,10 @@ extension LegacyV31Importer {
             "roots",
             """
             INSERT OR REPLACE INTO roots (
-                slug, display_name, kind, source_type, seed_path, page_count, status, index_etag
+                slug, display_name, kind, source_type, seed_path, page_count, status, index_etag, last_seen
             )
             SELECT slug, display_name, kind, COALESCE(source_type, 'apple-docc'),
-                   seed_path, page_count, status, index_etag
+                   seed_path, page_count, status, index_etag, last_seen
             FROM legacy.roots;
             """
         ),
@@ -48,7 +48,8 @@ extension LegacyV31Importer {
                 abstract_text, declaration_text, headings,
                 min_ios, min_macos, min_watchos, min_tvos, min_visionos,
                 min_ios_num, min_macos_num, min_watchos_num, min_tvos_num, min_visionos_num,
-                is_deprecated, is_beta, is_release_notes, url_depth, source_metadata, content_hash
+                is_deprecated, is_beta, is_release_notes, url_depth, source_metadata, content_hash,
+                platforms_json
             )
             SELECT id, COALESCE(source_type, 'apple-docc'), lower(key), title, kind, role, role_heading,
                    COALESCE(framework, CASE
@@ -60,8 +61,19 @@ extension LegacyV31Importer {
                    min_ios, min_macos, min_watchos, min_tvos, min_visionos,
                    min_ios_num, min_macos_num, min_watchos_num, min_tvos_num, min_visionos_num,
                    COALESCE(is_deprecated, 0), COALESCE(is_beta, 0), COALESCE(is_release_notes, 0),
-                   COALESCE(url_depth, 0), source_metadata, content_hash
+                   COALESCE(url_depth, 0), source_metadata, content_hash, platforms_json
             FROM legacy.documents;
+            """
+        ),
+        (
+            // Bun's crawl membership (`pages`, active = crawled under that root) becomes `crawl_state`, which
+            // drives root page counts and browse listings exactly like Bun's `pages` joins.
+            "pages",
+            """
+            INSERT OR REPLACE INTO crawl_state (path, status, root_slug, depth)
+            SELECT lower(p.path), CASE p.status WHEN 'active' THEN 'done' ELSE p.status END, r.slug,
+                   COALESCE(p.url_depth, 0)
+            FROM legacy.pages p JOIN legacy.roots r ON r.id = p.root_id;
             """
         ),
         (
@@ -167,8 +179,11 @@ extension LegacyV31Importer {
             "sf_symbols_fts",
             """
             DELETE FROM sf_symbols_fts;
-            INSERT INTO sf_symbols_fts (name, keywords, categories, aliases)
-            SELECT name, keywords, categories, aliases FROM legacy.sf_symbols_fts;
+            INSERT INTO sf_symbols_fts (rowid, name, keywords, categories, aliases)
+            SELECT s.rowid, f.name, f.keywords, f.categories, f.aliases
+            FROM legacy.sf_symbols_fts f
+            JOIN legacy.sf_symbols ls ON ls.rowid = f.rowid
+            JOIN sf_symbols s ON s.scope = ls.scope AND s.name = ls.name;
             """
         )
     ]

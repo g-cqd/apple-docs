@@ -97,7 +97,10 @@ let package = Package(
         ),
         .target(
             name: "AppleDocsOutput",
-            dependencies: ["AppleDocsCore", .product(name: "AemiJSON", package: "AemiJSON")],
+            dependencies: [
+                "AppleDocsCore", .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
+            ],
             path: "Sources/AppleDocsOutput",
             swiftSettings: strictSettings
         ),
@@ -146,7 +149,8 @@ let package = Package(
             dependencies: [
                 "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput", "AppleDocsPipeline",
                 "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsStorage",
-                .product(name: "AemiHTTP", package: "HTTP")
+                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsCommands",
             swiftSettings: strictSettings
@@ -247,7 +251,8 @@ let package = Package(
             name: "AppleDocsContentTests",
             dependencies: [
                 "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
-                .product(name: "AemiJSON", package: "AemiJSON")
+                .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Tests/AppleDocsContentTests",
             resources: [.copy("Fixtures")],

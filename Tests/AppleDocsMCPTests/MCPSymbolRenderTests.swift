@@ -73,7 +73,7 @@ struct MCPSymbolRenderTests {
             dispatcher,
             #"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"render_sf_symbol","arguments":{"name":"nope","format":"svg"}}}"#
         )
-        #expect(missing["error"].exists)
+        #expect(missing["result"]["isError"].bool == true)
     }
 
     @Test(.enabled(if: MCPSymbolRenderTests.hasRasterizer))

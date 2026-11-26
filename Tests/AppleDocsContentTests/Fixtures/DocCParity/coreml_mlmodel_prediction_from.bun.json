@@ -358,5 +358,6 @@
    "section": "Making predictions",
    "sortOrder": 6
   }
- ]
+ ],
+ "markdown": "---\ntitle: \"prediction(from:)\"\nframework: coreml\nrole: symbol\nrole_heading: Instance Method\nplatforms: [iOS 11.0+, iPadOS 11.0+, Mac Catalyst 13.1+, macOS 10.13+, tvOS 11.0+, visionOS 1.0+, watchOS 4.0+]\npath: \"coreml/mlmodel/prediction(from:)\"\n---\n\n# prediction(from:)\n\n## Declaration\n\n```swift\nfunc prediction(from input: any MLFeatureProvider) throws -> any MLFeatureProvider\n```\n\n## See Also\n\n### Making predictions\n\n- [prediction(from:options:)](coreml/mlmodel/prediction(from:options:).md)\n- [predictions(fromBatch:)](coreml/mlmodel/predictions(frombatch:).md)\n- [predictions(from:options:)](coreml/mlmodel/predictions(from:options:).md)\n- [prediction(from:using:)](coreml/mlmodel/prediction(from:using:).md)\n- [prediction(from:using:options:)](coreml/mlmodel/prediction(from:using:options:).md)\n- [MLPredictionOptions](coreml/mlpredictionoptions.md)\n- [Background Inference](bundleresources/entitlements/com.apple.developer.background-tasks.continued-processing.inference.md)\n"
 }

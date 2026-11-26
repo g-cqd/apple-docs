@@ -39,5 +39,6 @@
    "sortOrder": 4
   }
  ],
- "relationships": []
+ "relationships": [],
+ "markdown": "---\ntitle: Guide\nframework: coreml\npath: coreml/guide\n---\n\n# Guide\n\n## See Also\n\n### Optimization\n"
 }

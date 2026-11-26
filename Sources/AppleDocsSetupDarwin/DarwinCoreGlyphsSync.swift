@@ -118,9 +118,19 @@ public enum DarwinCoreGlyphsSync: Sendable {
                             catalog.orderByName[name].map { .integer(Int64($0)) } ?? .null
                         ]
                     )
+                    // The FTS row shares the symbol's rowid: searches join `sf_symbols_fts` back by rowid.
                     try store.connection.execute(
-                        "INSERT INTO sf_symbols_fts (name, keywords, categories, aliases) VALUES (?, ?, ?, ?)",
+                        "DELETE FROM sf_symbols_fts WHERE rowid = (SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?)",
+                        bindings: [.text(scope), .text(name)]
+                    )
+                    try store.connection.execute(
+                        """
+                        INSERT INTO sf_symbols_fts (rowid, name, keywords, categories, aliases)
+                        VALUES ((SELECT rowid FROM sf_symbols WHERE scope = ? AND name = ?), ?, ?, ?, ?)
+                        """,
                         bindings: [
+                            .text(scope),
+                            .text(name),
                             .text(name),
                             .text(keywords.joined(separator: " ")),
                             .text(categories.joined(separator: " ")),

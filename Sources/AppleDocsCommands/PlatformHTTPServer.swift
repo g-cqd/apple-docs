@@ -28,11 +28,13 @@ public enum PlatformHTTPServer: Sendable {
     }
 
     /// Route prefixes used as bounded metrics labels for both the web and MCP servers.
+    // @dl:disable -- declarative route list
     public static let metricRoutes = [
         "/", "/doc", "/search", "/symbols", "/fonts", "/assets", "/sitemap.xml", "/sitemaps", "/api/search",
         "/api/doc", "/api/frameworks", "/api/symbols", "/api/fonts", "/mcp", "/healthz", "/readyz", "/metrics",
         "/.well-known"
     ]
+    // @dl:enable
 
     /// `responder` wrapped in the standard serving chain (exposed for in-process tests).
     public static func servingChain(

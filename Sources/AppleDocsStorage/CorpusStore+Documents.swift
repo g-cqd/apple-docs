@@ -89,13 +89,13 @@ extension CorpusStore {
             abstract_text, declaration_text, headings,
             min_ios, min_macos, min_watchos, min_tvos, min_visionos,
             min_ios_num, min_macos_num, min_watchos_num, min_tvos_num, min_visionos_num,
-            is_deprecated, is_beta, is_release_notes, url_depth, source_metadata, content_hash
+            is_deprecated, is_beta, is_release_notes, url_depth, source_metadata, content_hash, platforms_json
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?
         )
         ON CONFLICT(key) DO UPDATE SET
             source_type = excluded.source_type,
@@ -126,6 +126,7 @@ extension CorpusStore {
             url_depth = excluded.url_depth,
             source_metadata = excluded.source_metadata,
             content_hash = excluded.content_hash,
+            platforms_json = excluded.platforms_json,
             updated_at = datetime('now')
         """
 
@@ -157,7 +158,8 @@ extension CorpusStore {
             .flag(document.isReleaseNotes),
             .integer(Int64(document.urlDepth)),
             .optionalText(document.sourceMetadataJSON),
-            .optionalText(document.contentHash)
+            .optionalText(document.contentHash),
+            .optionalText(document.platformsJSON)
         ])
         return bindings
     }
@@ -186,13 +188,17 @@ extension CorpusStore {
         d.source_type, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.url, d.language, d.usr,
         d.abstract_text, d.declaration_text, d.headings,
         d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
-        d.is_deprecated, d.is_beta, d.is_release_notes, d.url_depth, d.source_metadata, d.content_hash
+        d.is_deprecated, d.is_beta, d.is_release_notes, d.url_depth, d.source_metadata, d.content_hash,
+        d.platforms_json
         """
+
+    /// Number of columns in ``documentColumnList``.
+    public static let documentColumnCount = 25
 
     /// Decodes a ``DocumentRecord`` from `row` whose columns match ``documentColumnList`` starting at `offset`.
     public static func decodeDocument(_ row: SQLiteRow, offset: Int = 0) throws(SQLiteError) -> DocumentRecord {
         let key = try decodeDocumentKey(row, column: offset + 1)
-        let opt = try ((offset + 3) ... (offset + 23))
+        let opt = try ((offset + 3) ... (offset + 24))
             .map { index throws(SQLiteError) -> SQLiteValue in
                 try row.value(at: index)
             }
@@ -217,6 +223,7 @@ extension CorpusStore {
                 tvos: opt[13].textValue,
                 visionos: opt[14].textValue
             ),
+            platformsJSON: opt[21].textValue,
             isDeprecated: (opt[15].integerValue ?? 0) != 0,
             isBeta: (opt[16].integerValue ?? 0) != 0,
             isReleaseNotes: (opt[17].integerValue ?? 0) != 0,

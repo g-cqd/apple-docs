@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS roots (
     page_count   INTEGER NOT NULL DEFAULT 0,
     status       TEXT NOT NULL DEFAULT 'active',
     index_etag   TEXT,
+    last_seen    TEXT,
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS documents (
     abstract_text    TEXT,
     declaration_text TEXT,
     headings         TEXT,
+    platforms_json   TEXT,
     min_ios          TEXT,
     min_macos        TEXT,
     min_watchos      TEXT,

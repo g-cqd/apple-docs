@@ -121,7 +121,7 @@ struct MCPPhase1ParityTests {
         let matchCall =
             #"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_doc","arguments":{"path":"swiftui/navigationstack","match":{"query":"NavigationPath"}}}}"#
         let matchResp = try #require(await dispatcher.handleRawPayload(Array(matchCall.utf8)))
-        #expect(String(decoding: matchResp, as: UTF8.self).contains("sectionHeading"))
+        #expect(String(decoding: matchResp, as: UTF8.self).contains(#"\"excerpt\""#))
 
         // resources/templates/list, resources/list, and resources/read
         let templatesResp = try #require(

@@ -47,6 +47,16 @@ struct DocCNormalizationParityTests {
         compareDocument(converted.document, golden["document"])
         compareSections(converted.sections, golden["sections"])
         compareRelationships(converted.relationships, golden["relationships"])
+        let header = BunMarkdownRenderer.Header(
+            key: fixture.key,
+            title: converted.document.title,
+            framework: converted.document.framework,
+            role: converted.document.role,
+            roleHeading: converted.document.roleHeading,
+            platformsJSON: converted.document.platformsJSON
+        )
+        let markdown = BunMarkdownRenderer.render(header, sections: converted.sections)
+        #expect(markdown == golden["markdown"].string)
     }
 
     private func compareDocument(_ document: DocumentRecord, _ expected: JSON) {
@@ -65,6 +75,10 @@ struct DocCNormalizationParityTests {
         #expect(document.availability.watchos == expected["minWatchos"].string)
         #expect(document.availability.tvos == expected["minTvos"].string)
         #expect(document.availability.visionos == expected["minVisionos"].string)
+        let platforms = document.platformsJSON.flatMap { try? AemiJSON.parse(Array($0.utf8)).root }.map(JSONValue.init)
+        let wantedPlatforms = expected["platformsJson"].string
+            .flatMap { try? AemiJSON.parse(Array($0.utf8)).root }.map(JSONValue.init)
+        #expect(platforms == wantedPlatforms)
         #expect(document.isDeprecated == (expected["isDeprecated"].bool ?? false))
         #expect(document.isBeta == (expected["isBeta"].bool ?? false))
         #expect(document.isReleaseNotes == (expected["isReleaseNotes"].bool ?? false))

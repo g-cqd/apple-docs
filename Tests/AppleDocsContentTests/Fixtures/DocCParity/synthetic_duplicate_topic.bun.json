@@ -71,5 +71,6 @@
    "section": "Managing Drawing",
    "sortOrder": 1
   }
- ]
+ ],
+ "markdown": "---\ntitle: PDFSelection\nframework: pdfkit\npath: pdfkit/pdfselection\n---\n\n# PDFSelection\n\n## Topics\n\n### Getting Information\n\n- [color](pdfkit/pdfselection/color.md)\n\n### Managing Drawing\n\n- [color](pdfkit/pdfselection/color.md)\n"
 }

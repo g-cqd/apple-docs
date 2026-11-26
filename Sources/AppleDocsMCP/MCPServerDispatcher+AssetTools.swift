@@ -6,21 +6,6 @@ import AppleDocsStorage
 
 /// Asset tools: `search_sf_symbols`, `list_apple_fonts`, `render_sf_symbol`, `render_font_text`.
 extension MCPServerDispatcher {
-    func invokeSearchSFSymbols(_ args: JSON) async throws -> String {
-        let query = args["query"].string ?? ""
-        let scope = args["scope"].string ?? "public"
-        let limit = args["limit"].int ?? 100
-        return try await encodeFromPool { conn in
-            try AssetQueryService.searchSFSymbols(query: query, scope: scope, limit: limit, on: conn)
-        }
-    }
-
-    func invokeListAppleFonts() async throws -> String {
-        try await encodeFromPool { conn in
-            try AssetQueryService.listAppleFonts(on: conn)
-        }
-    }
-
     func invokeRenderSFSymbol(_ args: JSON) async throws -> String {
         let name = try requiredString(args, key: "name", tool: "render_sf_symbol")
         let options = SFSymbolRenderArgs(args: args)
@@ -50,7 +35,7 @@ extension MCPServerDispatcher {
     func invokeRenderFontText(_ args: JSON) async throws -> String {
         let fontID = try requiredString(args, key: "fontId", tool: "render_font_text")
         let text = args["text"].string ?? "AaBbCc 0123"
-        let size = Double(args["size"].int ?? 48)
+        let size = Double(args["size"].int ?? 96)  // Bun `renderFontText` default point size
         let dbPath = reader.databasePath
         return try await renderWithPermit {
             let conn = try SQLiteConnection(path: dbPath, options: .readOnly)
@@ -74,8 +59,8 @@ private struct SFSymbolRenderArgs: Sendable {
     init(args: JSON) {
         self.scope = args["scope"].string == "private" ? "private" : "public"
         self.format = args["format"].string == "svg" ? "svg" : "png"
-        self.size = args["size"].int ?? 128
-        self.color = args["color"].string ?? "currentColor"
+        self.size = args["size"].int ?? 64  // Bun `renderSfSymbol` default point size
+        self.color = args["color"].string ?? "#000000"  // Bun default
         self.background = args["background"].string ?? "transparent"
     }
 }

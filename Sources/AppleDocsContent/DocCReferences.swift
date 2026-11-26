@@ -110,7 +110,8 @@ enum DocCReferences {
         node["items"] = .array(
             items.map { item in
                 guard case .object(var entry) = item else { return item }
-                if let content = entry["content"], content.isTruthy {
+                // Bun only rewrites array content (`resolveContentReferences` returns non-arrays untouched).
+                if let content = entry["content"], case .array = content {
                     entry["content"] = resolved(content, refs: refs, depth: depth + 1, isList: true)
                 }
                 if isTermList {

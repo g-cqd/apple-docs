@@ -219,5 +219,6 @@
    "section": "Related",
    "sortOrder": 2
   }
- ]
+ ],
+ "markdown": "---\ntitle: Algorithm\nframework: compression\nrole_heading: Enumeration\npath: compression/algorithm\n---\n\n# Algorithm\n\nAlgorithms used by compression_encode_buffer(_:_:_:_:_:_:)\n\n## Declaration\n\n```swift\nenum Algorithm\n```\n\n## Possible Values\n\nlzfse: Apple's codec.\n\n## Mentioned in\n\nCompressing files\n\n## Choose an algorithm\n\nChoose an algorithm Speed Ratio\n\n## Topics\n\n### Codecs\n\n- [lzfse](compression/algorithm/lzfse.md)\n\n## Relationships\n\n### Conforms To\n\n- [Sendable](swift/sendable.md)\n\n## See Also\n\n### Related\n\n- [compression_encode_buffer(_:_:_:_:_:_:)](compression/compression_encode_buffer(_:_:_:_:_:_:).md)\n"
 }
