@@ -157,7 +157,13 @@ public final class CorpusStore {
     }
 
     /// Deletes a document by key (cascading sections, raw payloads, chunks, vectors, and FTS triggers).
+    /// Deletes a document; its sections, vectors, and chunks cascade, and its contentless body index row
+    /// (not reachable by a foreign key) is removed explicitly.
     public func deleteDocument(forKey key: DocumentKey) throws(SQLiteError) {
+        try connection.execute(
+            "DELETE FROM documents_body_fts WHERE rowid = (SELECT id FROM documents WHERE key = ?)",
+            bindings: [.text(key.rawValue)]
+        )
         try connection.execute("DELETE FROM documents WHERE key = ?", bindings: [.text(key.rawValue)])
     }
 

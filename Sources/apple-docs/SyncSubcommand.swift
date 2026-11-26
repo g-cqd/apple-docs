@@ -1,6 +1,7 @@
 import AppleDocsCommands
 import AppleDocsCore
 import AppleDocsPipeline
+import AppleDocsSearch
 import AppleDocsSources
 import AppleDocsStorage
 import ArgumentParser
@@ -30,6 +31,9 @@ struct SyncSubcommand: AsyncParsableCommand {
 
     @Flag(name: .long, inversion: .prefixedNo, help: "Refresh the root catalog from Apple's technologies index.")
     var discover = true
+
+    @Flag(name: .long, inversion: .prefixedNo, help: "Update the semantic search index after the crawl.")
+    var embeddings = true
 
     @Option(name: .long, help: "Maximum pages to fetch (default: unlimited; 50 with --seed).")
     var maxPages: Int?
@@ -79,11 +83,15 @@ struct SyncSubcommand: AsyncParsableCommand {
                 full: full,
                 concurrency: concurrency,
                 maxPages: maxPages ?? Int.max,
-                maxDepth: maxDepth ?? 1_000
+                maxDepth: maxDepth ?? 1_000,
+                embeddings: embeddingStage()
             )
         )
         for (slug, error) in report.indexFailures.sorted(by: { $0.key < $1.key }).prefix(10) {
             print("warning: index for \(slug) unavailable (\(error)); revalidated its pages instead")
+        }
+        if let embedded = report.embeddings {
+            print("Semantic index: \(embedded.chunks) chunks embedded across \(embedded.documents) documents")
         }
         let crawl = report.crawl
         print(
@@ -94,6 +102,17 @@ struct SyncSubcommand: AsyncParsableCommand {
             discovered=\(crawl.discoveredQueued), errors=\(crawl.errors)
             """
         )
+    }
+
+    /// The semantic model when installed (`apple-docs setup`), else `nil` with a note: search stays lexical.
+    private func embeddingStage() -> CorpusSync.EmbeddingStage? {
+        guard embeddings else { return nil }
+        let directory = CorpusPaths.defaultModelDirectory()
+        guard let embedder = try? Model2VecEmbedder(modelDirectory: directory) else {
+            print("note: semantic index skipped (no model at \(directory)); run `apple-docs setup` to install it")
+            return nil
+        }
+        return CorpusSync.EmbeddingStage(embedder: embedder, modelName: CorpusPaths.defaultEmbeddingModelName)
     }
 
     private func syncSeeds(kind: SourceKind, store: CorpusStore) async throws {

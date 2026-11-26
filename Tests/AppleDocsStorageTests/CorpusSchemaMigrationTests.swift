@@ -1,3 +1,4 @@
+import AppleDocsCore
 import AppleDocsStorage
 import Foundation
 import Testing
@@ -38,5 +39,26 @@ struct CorpusSchemaMigrationTests {
         defer { reopened.close() }
         let columns = try reopened.connection.query("PRAGMA table_info(roots)").map { try $0.text(at: 1) }
         #expect(columns.contains("last_seen"))
+    }
+
+    @Test func `deleting a document also drops its body index row and chunks`() throws {
+        let store = try CorpusStore(path: ":memory:")
+        defer { store.close() }
+        let key = try DocumentKey("swiftui/gone")
+        let id = try store.upsertDocument(DocumentRecord(key: key, title: "Gone"))
+        try store.replaceSections(
+            forDocumentID: id,
+            sections: [DocumentSectionRecord(sectionKind: "discussion", contentText: "zebracorn")]
+        )
+        try store.connection.execute(
+            "INSERT INTO document_chunks (document_id, ord, vec_bin) VALUES (?, 0, x'00')",
+            bindings: [.integer(id)]
+        )
+        try store.deleteDocument(forKey: key)
+        let body = try store.connection.query(
+            "SELECT rowid FROM documents_body_fts WHERE documents_body_fts MATCH 'zebracorn'"
+        )
+        #expect(body.isEmpty)
+        #expect(try store.connection.queryOne("SELECT COUNT(*) FROM document_chunks")?.integer(at: 0) == 0)
     }
 }

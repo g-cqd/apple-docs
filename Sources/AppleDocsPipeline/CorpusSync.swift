@@ -1,4 +1,5 @@
 public import AppleDocsCore
+public import AppleDocsSearch
 public import AppleDocsSources
 public import AppleDocsStorage
 public import Foundation
@@ -26,6 +27,8 @@ public enum CorpusSync {
         public var tombstoneThreshold: Int
         public var fullSweepInterval: TimeInterval
         public var now: Date
+        /// The semantic index stage after the crawl (`nil` skips it; search then stays lexical for new pages).
+        public var embeddings: EmbeddingStage?
 
         public init(
             sources: Set<SourceKind> = [.appleDocC, .hig],
@@ -37,7 +40,8 @@ public enum CorpusSync {
             maxDepth: Int = 1_000,
             tombstoneThreshold: Int = 2,
             fullSweepInterval: TimeInterval = 7 * 24 * 60 * 60,
-            now: Date = Date()
+            now: Date = Date(),
+            embeddings: EmbeddingStage? = nil
         ) {
             self.sources = sources
             self.roots = roots
@@ -49,6 +53,18 @@ public enum CorpusSync {
             self.tombstoneThreshold = max(1, tombstoneThreshold)
             self.fullSweepInterval = fullSweepInterval
             self.now = now
+            self.embeddings = embeddings
+        }
+    }
+
+    /// The model the post-crawl embedding stage uses.
+    public struct EmbeddingStage: Sendable {
+        public let embedder: Model2VecEmbedder
+        public let modelName: String
+
+        public init(embedder: Model2VecEmbedder, modelName: String) {
+            self.embedder = embedder
+            self.modelName = modelName
         }
     }
 
@@ -62,6 +78,8 @@ public enum CorpusSync {
         public var indexFailures: [String: String] = [:]
         public var fullSweep = false
         public var crawl = SyncOrchestrator.RunReport.empty
+        /// Documents and chunks embedded after the crawl (`nil` when the stage did not run).
+        public var embeddings: ChunkEmbeddingIndexer.Report?
     }
 
     public static func run(
@@ -109,6 +127,14 @@ public enum CorpusSync {
             try SyncOrchestrator.refreshRootStats(rootSlug: root.slug, seedPath: root.seedPath, on: store.connection)
         }
         try gate.commit(drainedOnly: true, store: store)
+        if let stage = options.embeddings {
+            report.embeddings = try await ChunkEmbeddingIndexer.run(
+                store: store,
+                embedder: stage.embedder,
+                modelName: stage.modelName,
+                full: options.full
+            )
+        }
         return report
     }
 }

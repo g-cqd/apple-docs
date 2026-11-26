@@ -70,9 +70,7 @@ private actor SemanticStateActor {
         if attempted { return loaded }
         attempted = true
         if ProcessInfo.processInfo.environment["APPLE_DOCS_SEMANTIC"] == "off" { return nil }
-        let modelDir = URL(fileURLWithPath: resourcesDirectory, isDirectory: true)
-            .appendingPathComponent("models/minishlab/potion-retrieval-32M", isDirectory: true)
-            .path
+        let modelDir = CorpusPaths.defaultModelDirectory(resourcesDirectory: resourcesDirectory)
         guard FileManager.default.fileExists(atPath: modelDir),
             let embedder = try? Model2VecEmbedder(modelDirectory: modelDir)
         else {

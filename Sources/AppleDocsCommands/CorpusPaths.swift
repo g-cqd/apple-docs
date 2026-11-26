@@ -26,4 +26,14 @@ public enum CorpusPaths: Sendable {
             .appendingPathComponent("resources", isDirectory: true)
             .path
     }
+
+    /// The default semantic model (Bun's `potion-retrieval-32M`).
+    public static let defaultEmbeddingModelName = "potion-retrieval-32M"
+
+    /// The Model2Vec model directory under the resources directory.
+    public static func defaultModelDirectory(resourcesDirectory: String = defaultResourcesDirectory()) -> String {
+        URL(fileURLWithPath: resourcesDirectory, isDirectory: true)
+            .appendingPathComponent("models/minishlab/\(defaultEmbeddingModelName)", isDirectory: true)
+            .path
+    }
 }

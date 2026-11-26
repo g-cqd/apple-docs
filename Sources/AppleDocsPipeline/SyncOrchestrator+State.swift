@@ -1,43 +1,8 @@
-import AemiSearch
 import AppleDocsCore
-public import AppleDocsSearch
-public import AppleDocsStorage
+import AppleDocsStorage
 
 extension SyncOrchestrator {
     /// Computes binary quantized `document_vectors` for all documents lacking an embedding yet.
-    public static func buildMissingEmbeddings(
-        in store: CorpusStore,
-        embedder: Model2VecEmbedder,
-        limit: Int = 10_000
-    ) throws -> Int {
-        let rows = try store.connection.query(
-            """
-            SELECT d.id, d.title, COALESCE(d.abstract_text, ''), COALESCE(d.headings, '')
-            FROM documents d
-            LEFT JOIN document_vectors v ON v.document_id = d.id
-            WHERE v.document_id IS NULL
-            ORDER BY d.id ASC
-            LIMIT ?
-            """,
-            bindings: [.integer(Int64(max(1, limit)))]
-        )
-        guard !rows.isEmpty else { return 0 }
-        try store.connection.transaction {
-            for row in rows {
-                let docID = try row.integer(at: 0)
-                let combined = [try row.text(at: 1), try row.text(at: 2), try row.text(at: 3)]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " ")
-                let quantized = BinaryVectorScorer.quantizeBinary(embedder.embed(combined))
-                try store.connection.execute(
-                    "INSERT OR REPLACE INTO document_vectors (document_id, vec) VALUES (?, ?)",
-                    bindings: [.integer(docID), .blob(quantized)]
-                )
-            }
-        }
-        return rows.count
-    }
-
     static func seedQueue(root: CorpusRootRecord, seeds: [DocumentKey], into store: CorpusStore) throws {
         try store.connection.transaction {
             try store.upsertRoot(root)

@@ -159,9 +159,9 @@ struct Phase3SyncTests {
             tokenizer: try WordPieceTokenizer(tokenizerJSON: Array(tokJSON.utf8)),
             matrix: Model2VecEmbedder.EmbeddingMatrix(rows: 3, dims: 8, weights: [Float](repeating: 1.0, count: 24))
         )
-        let built = try SyncOrchestrator.buildMissingEmbeddings(in: store, embedder: embedder)
-        #expect(built == 2)
-        #expect(try SyncOrchestrator.buildMissingEmbeddings(in: store, embedder: embedder) == 0)
+        let built = try await ChunkEmbeddingIndexer.run(store: store, embedder: embedder, modelName: "test")
+        #expect(built.documents == 2)
+        #expect(try await ChunkEmbeddingIndexer.run(store: store, embedder: embedder, modelName: "test").documents == 0)
 
         // Run 2: child gets 1st 404 (kept alive); root gets 304 (skipped)
         try await verifyIncrementalAndTombstone(transport: transport, adapter: adapter, client: client, store: store)

@@ -119,7 +119,7 @@ let package = Package(
             name: "AppleDocsPipeline",
             dependencies: [
                 "AppleDocsCore", "AppleDocsContent", "AppleDocsSearch", "AppleDocsSources", "AppleDocsStorage",
-                .product(name: "AemiSearch", package: "AemiSearch"), .product(name: "AemiDigest", package: "aemi")
+                .product(name: "AemiDigest", package: "aemi")
             ],
             path: "Sources/AppleDocsPipeline",
             swiftSettings: strictSettings
