@@ -1,0 +1,5 @@
+module CAppleDocsZstd [system] {
+    header "shim.h"
+    link "zstd"
+    export *
+}

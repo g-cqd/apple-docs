@@ -53,6 +53,12 @@ let package = Package(
     ],
     targets: [
         .systemLibrary(name: "CSQLite", path: "Sources/CSQLite", providers: [.apt(["libsqlite3-dev"])]),
+        .systemLibrary(
+            name: "CAppleDocsZstd",
+            path: "Sources/CAppleDocsZstd",
+            pkgConfig: "libzstd",
+            providers: [.apt(["libzstd-dev"]), .brew(["zstd"])]
+        ),
         .target(
             name: "AppleDocsCore",
             dependencies: [
@@ -63,7 +69,7 @@ let package = Package(
         ),
         .target(
             name: "AppleDocsStorage",
-            dependencies: ["AppleDocsCore", "CSQLite", .product(name: "AemiIO", package: "aemi")],
+            dependencies: ["AppleDocsCore", "CSQLite", "CAppleDocsZstd", .product(name: "AemiIO", package: "aemi")],
             path: "Sources/AppleDocsStorage",
             resources: [.process("Resources")],
             swiftSettings: strictSettings

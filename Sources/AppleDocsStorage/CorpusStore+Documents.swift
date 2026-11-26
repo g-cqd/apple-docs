@@ -173,11 +173,11 @@ extension CorpusStore {
     }
 
     private static func decodeTextOrUTF8Blob(_ row: SQLiteRow, column: Int) throws(SQLiteError) -> String? {
-        switch try row.value(at: column) {
-            case .null: nil
-            case .text(let string): string
-            case .blob(let bytes): String(decoding: bytes, as: UTF8.self)
-            default: throw .typeMismatch(column: column, expected: "TEXT|BLOB?")
+        let cell = try row.value(at: column)
+        do {
+            return try ZstdCodec.decodeText(from: cell)
+        } catch .typeMismatch {
+            throw .typeMismatch(column: column, expected: "TEXT|BLOB?")
         }
     }
 

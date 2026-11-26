@@ -7,7 +7,15 @@ struct MCPSubcommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mcp",
         abstract: "Run the MCP JSON-RPC 2.0 server (stdio by default, or 'serve' for HTTP).",
-        subcommands: [MCPServeSubcommand.self]
+        subcommands: [MCPStdioSubcommand.self, MCPServeSubcommand.self],
+        defaultSubcommand: MCPStdioSubcommand.self
+    )
+}
+
+private struct MCPStdioSubcommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "stdio",
+        abstract: "Run the MCP JSON-RPC 2.0 server over stdio."
     )
 
     @Option(name: .long, help: "Override corpus database path.") var db: String?
