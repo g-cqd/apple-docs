@@ -26,79 +26,87 @@ public final class ChunkVectorStore: Sendable {
         self.chunkIDs = chunkIDs
     }
 
-    /// Loads the store, or `nil` when the corpus has no usable vectors.
+    /// Loads the store, or `nil` when the corpus has no usable vectors. Rows are streamed straight into the packed
+    /// buffers, so memory holds the vectors (≈ 59 MiB for the full corpus), never the result set.
     public static func load(from connection: SQLiteConnection) throws(SQLiteError) -> ChunkVectorStore? {
         let chunkCount = (try? connection.queryOne("SELECT COUNT(*) FROM document_chunks")?.integer(at: 0)) ?? 0
-        if chunkCount > 0 { return try loadChunks(from: connection) }
+        if chunkCount > 0 { return try loadChunks(from: connection, count: Int(chunkCount)) }
         return try loadLegacy(from: connection)
     }
 
-    private static func loadChunks(from connection: SQLiteConnection) throws(SQLiteError) -> ChunkVectorStore? {
-        let rows = try connection.query(
-            "SELECT chunk_id, document_id, vec_bin FROM document_chunks ORDER BY document_id, ord"
-        )
-        guard let sample = rows.lazy.compactMap({ try? $0.optionalBlob(at: 2) }).first else { return nil }
+    private static func loadChunks(from connection: SQLiteConnection, count: Int) throws(SQLiteError)
+        -> ChunkVectorStore?
+    {
+        let sampleWidth = try connection.queryOne("SELECT length(vec_bin) FROM document_chunks LIMIT 1")?.integer(at: 0)
         let metaDims = (try? connection.queryOne("SELECT value FROM snapshot_meta WHERE key = 'embed_dims'"))
             .flatMap { try? $0?.text(at: 0) }.flatMap { Int($0) }
-        let dimensions = metaDims.flatMap { $0 > 0 ? $0 : nil } ?? sample.count * 8
+        let dimensions = metaDims.flatMap { $0 > 0 ? $0 : nil } ?? Int(sampleWidth ?? 0) * 8
+        guard dimensions > 0 else { return nil }
         let width = (dimensions + 7) / 8
-        let (packed, documentIDs, chunkIDs) = try pack(
-            rows,
+        let buffers = try pack(
+            "SELECT chunk_id, document_id, vec_bin FROM document_chunks ORDER BY document_id, ord",
+            capacity: count,
             width: width,
-            blobColumn: 2,
-            documentColumn: 1,
-            chunkColumn: 0
+            withChunkIDs: true,
+            on: connection
         )
-        guard !documentIDs.isEmpty else { return nil }
+        guard !buffers.documentIDs.isEmpty else { return nil }
         return ChunkVectorStore(
             mode: .chunk,
             dimensions: dimensions,
             byteWidth: width,
-            packed: packed,
-            documentIDs: documentIDs,
-            chunkIDs: chunkIDs
+            packed: buffers.packed,
+            documentIDs: buffers.documentIDs,
+            chunkIDs: buffers.chunkIDs
         )
     }
 
     private static func loadLegacy(from connection: SQLiteConnection) throws(SQLiteError) -> ChunkVectorStore? {
         let width = 64  // VECTOR_BYTES (512 dimensions)
-        guard let rows = try? connection.query("SELECT document_id, vec FROM document_vectors") else { return nil }
-        let (packed, documentIDs, _) = try pack(
-            rows,
-            width: width,
-            blobColumn: 1,
-            documentColumn: 0,
-            chunkColumn: nil
-        )
-        guard !documentIDs.isEmpty else { return nil }
+        guard
+            let buffers = try? pack(
+                "SELECT 0, document_id, vec FROM document_vectors",
+                capacity: 0,
+                width: width,
+                withChunkIDs: false,
+                on: connection
+            ), !buffers.documentIDs.isEmpty
+        else { return nil }
         return ChunkVectorStore(
             mode: .legacy,
             dimensions: width * 8,
             byteWidth: width,
-            packed: packed,
-            documentIDs: documentIDs,
+            packed: buffers.packed,
+            documentIDs: buffers.documentIDs,
             chunkIDs: []
         )
     }
 
-    /// Concatenates every row's `width`-byte bit vector (rows with another width are skipped).
+    /// Streams `(chunk_id, document_id, bits)` rows of `sql` into packed buffers (rows of another width skipped).
     private static func pack(
-        _ rows: [SQLiteRow],
+        _ sql: String,
+        capacity: Int,
         width: Int,
-        blobColumn: Int,
-        documentColumn: Int,
-        chunkColumn: Int?
+        withChunkIDs: Bool,
+        on connection: SQLiteConnection
     ) throws(SQLiteError) -> (packed: [UInt8], documentIDs: [Int64], chunkIDs: [Int64]) {
         var packed: [UInt8] = []
-        packed.reserveCapacity(rows.count * width)
         var documentIDs: [Int64] = []
         var chunkIDs: [Int64] = []
-        documentIDs.reserveCapacity(rows.count)
-        for row in rows {
-            guard let bits = try? row.optionalBlob(at: blobColumn), bits.count == width else { continue }
-            packed.append(contentsOf: bits)
-            documentIDs.append(try row.integer(at: documentColumn))
-            if let chunkColumn { chunkIDs.append(try row.integer(at: chunkColumn)) }
+        packed.reserveCapacity(capacity * width)
+        documentIDs.reserveCapacity(capacity)
+        if withChunkIDs { chunkIDs.reserveCapacity(capacity) }
+        do {
+            try connection.forEachRow(sql) { row in
+                guard let bits = try? row.optionalBlob(at: 2), bits.count == width else { return }
+                packed.append(contentsOf: bits)
+                documentIDs.append(try row.integer(at: 1))
+                if withChunkIDs { chunkIDs.append(try row.integer(at: 0)) }
+            }
+        } catch let error as SQLiteError {
+            throw error
+        } catch {
+            throw .closed
         }
         return (packed, documentIDs, chunkIDs)
     }

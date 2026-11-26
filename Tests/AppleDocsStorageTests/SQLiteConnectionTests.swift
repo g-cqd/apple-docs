@@ -134,4 +134,30 @@ struct SQLiteConnectionTests {
         #expect(await pool.totalCreatedConnections == 1)
         await pool.close()
     }
+
+    @Test func `forEachRow streams every row in order and stops on the first thrown error`() throws {
+        let connection = try SQLiteConnection(path: ":memory:")
+        try connection.executeScript(
+            "CREATE TABLE t (id INTEGER, payload BLOB); INSERT INTO t VALUES (1, x'01'), (2, x'0203'), (3, NULL);"
+        )
+        var seen: [(Int64, [UInt8]?)] = []
+        try connection.forEachRow("SELECT id, payload FROM t WHERE id >= ? ORDER BY id", bindings: [.integer(1)]) {
+            row in
+            seen.append((try row.integer(at: 0), try row.optionalBlob(at: 1)))
+        }
+        #expect(seen.map(\.0) == [1, 2, 3])
+        #expect(seen.map(\.1) == [[0x01], [0x02, 0x03], nil])
+
+        struct Stop: Error {}
+        var visited = 0
+        #expect(throws: Stop.self) {
+            try connection.forEachRow("SELECT id FROM t ORDER BY id") { _ in
+                visited += 1
+                if visited == 2 { throw Stop() }
+            }
+        }
+        #expect(visited == 2)
+        // The statement was reset: it can run again.
+        #expect(try connection.query("SELECT COUNT(*) FROM t").first?.integer(at: 0) == 3)
+    }
 }

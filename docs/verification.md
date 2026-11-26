@@ -47,7 +47,8 @@ Run one with `Fuzz/run.sh <Harness> [seconds]`, all with `Fuzz/ci.sh` (nightly i
   Cold latency is dominated by OS page-cache residency of each database file, so give Bun a fresh copy of its
   database (`mcp start --home DIR`) made alongside the Swift one. Measured that way over the full corpus (cold,
   distinct pages, MCP cache off): `read_doc` p50 8.8 ms (Swift) vs 9.4 ms (Bun), p99 42.6 vs 43.4 ms; paginated
-  p50 7.4 vs 7.1 ms, p99 28.4 vs 34.1 ms; RSS 99 vs 182 MiB. Warm, both serve a page in ~0.14 ms.
+  p50 7.4 vs 7.1 ms, p99 28.4 vs 34.1 ms; RSS 99 vs 182 MiB. Warm, both serve a page in ~0.14 ms. `search_docs`
+  (semantic tier on, 200 random titles): p50 46 vs 45 ms, p90 112 vs 131 ms, p99 416 vs 375 ms, RSS 609 vs 612 MiB.
 
 ## Release path
 

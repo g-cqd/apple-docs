@@ -66,9 +66,20 @@
   },
   "commands": [
     {
+      "id": "linux-system-packages",
+      "title": "Setup · System Packages",
+      "run": "apt-get update -qq && apt-get install -y -qq --no-install-recommends libsqlite3-dev > /dev/null",
+      "before": [
+        "linux-debug",
+        "linux-release",
+        "linux-address",
+        "linux-thread"
+      ]
+    },
+    {
       "id": "layer-guards",
       "title": "Quality · Layering & Scripts",
-      "run": "python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py",
+      "run": "command -v python3 > /dev/null || { apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 > /dev/null; }; python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py",
       "os": "linux"
     },
     {

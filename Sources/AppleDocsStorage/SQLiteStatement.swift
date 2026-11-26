@@ -76,6 +76,19 @@ final class SQLiteStatement {
         }
     }
 
+    /// Steps through the result rows, handing each to `body` as it is read (one row alive at a time).
+    func forEachRow(_ body: (SQLiteRow) throws -> Void) throws {
+        guard let stmt = handle else { throw SQLiteError.closed }
+        defer { reset() }
+        let columnCount = Int(unsafe sqlite3_column_count(stmt))
+        while true {
+            let rc = unsafe sqlite3_step(stmt)
+            if rc == SQLITE_DONE { return }
+            guard rc == SQLITE_ROW else { throw SQLiteError.fromHandle(unsafe sqlite3_db_handle(stmt), code: rc) }
+            try body(readRow(stmt: stmt, columnCount: columnCount))
+        }
+    }
+
     /// Steps through every result row and materializes ``SQLiteRow`` values.
     func queryAll() throws(SQLiteError) -> [SQLiteRow] {
         guard let stmt = handle else { throw .closed }

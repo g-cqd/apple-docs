@@ -114,6 +114,17 @@ public final class SQLiteConnection {
         return try stmt.queryAll()
     }
 
+    /// Streams the rows of a statement to `body` without materializing the result set (for large scans).
+    public func forEachRow(
+        _ sql: String,
+        bindings: [SQLiteValue] = [],
+        _ body: (SQLiteRow) throws -> Void
+    ) throws {
+        let stmt = try cachedStatement(for: sql)
+        try stmt.bind(bindings)
+        try stmt.forEachRow(body)
+    }
+
     /// `?, ?, …` for an `IN (…)` list of `count` bound values.
     public static func placeholders(_ count: Int) -> String {
         Array(repeating: "?", count: count).joined(separator: ",")
