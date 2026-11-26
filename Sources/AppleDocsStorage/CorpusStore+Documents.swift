@@ -81,13 +81,7 @@ extension CorpusStore {
         return try rows.map(Self.decodeSection)
     }
 
-    private static let documentSelectSQL = """
-        SELECT source_type, key, title, kind, role, role_heading, framework, url, language, usr,
-               abstract_text, declaration_text, headings,
-               min_ios, min_macos, min_watchos, min_tvos, min_visionos,
-               is_deprecated, is_beta, is_release_notes, url_depth, source_metadata, content_hash
-        FROM documents
-        """
+    private static let documentSelectSQL = "SELECT \(documentColumnList) FROM documents d"
 
     private static let upsertDocumentSQL = """
         INSERT INTO documents (
@@ -187,17 +181,29 @@ extension CorpusStore {
         }
     }
 
-    private static func decodeDocument(_ row: SQLiteRow) throws(SQLiteError) -> DocumentRecord {
-        let key = try decodeDocumentKey(row, column: 1)
-        let opt = try (3 ... 23).map { index throws(SQLiteError) -> SQLiteValue in try row.value(at: index) }
+    /// Canonical column list (`source_type` .. `content_hash`) for decoding a ``DocumentRecord`` starting at offset `columnOffset`.
+    public static let documentColumnList = """
+        d.source_type, d.key, d.title, d.kind, d.role, d.role_heading, d.framework, d.url, d.language, d.usr,
+        d.abstract_text, d.declaration_text, d.headings,
+        d.min_ios, d.min_macos, d.min_watchos, d.min_tvos, d.min_visionos,
+        d.is_deprecated, d.is_beta, d.is_release_notes, d.url_depth, d.source_metadata, d.content_hash
+        """
+
+    /// Decodes a ``DocumentRecord`` from `row` whose columns match ``documentColumnList`` starting at `offset`.
+    public static func decodeDocument(_ row: SQLiteRow, offset: Int = 0) throws(SQLiteError) -> DocumentRecord {
+        let key = try decodeDocumentKey(row, column: offset + 1)
+        let opt = try ((offset + 3) ... (offset + 23))
+            .map { index throws(SQLiteError) -> SQLiteValue in
+                try row.value(at: index)
+            }
         return DocumentRecord(
             key: key,
-            sourceType: SourceKind(rawValue: try row.text(at: 0)) ?? .appleDocC,
-            title: try row.text(at: 2),
+            sourceType: SourceKind(rawValue: try row.text(at: offset)) ?? .appleDocC,
+            title: try row.text(at: offset + 2),
             kind: opt[0].textValue,
             role: opt[1].textValue,
             roleHeading: opt[2].textValue,
-            framework: try row.text(at: 6),
+            framework: try row.text(at: offset + 6),
             url: opt[4].textValue,
             language: opt[5].textValue,
             usr: opt[6].textValue,
