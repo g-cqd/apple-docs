@@ -1,3 +1,4 @@
+import AemiSearch
 import AppleDocsCore
 import AppleDocsSearch
 import AppleDocsStorage
