@@ -35,6 +35,11 @@ public enum WebHTMLRenderer: Sendable {
         )
     }
 
+    /// Renders stored section Markdown (the converters' subset) to escaped HTML, as document pages do.
+    public static func renderMarkdownFragment(_ markdown: String) -> String {
+        WebMarkdownBlockRenderer.render(markdown)
+    }
+
     /// The shared HTML5 layout: header (brand, navigation, search, theme toggle), `<main>`, and footer.
     static func page(title: String, description: String? = nil, body: String) -> String {
         let meta = description.map { "\n<meta name=\"description\" content=\"\(escapeHTML($0))\">" } ?? ""
@@ -82,7 +87,7 @@ public enum WebHTMLRenderer: Sendable {
     /// A `<ul class="link-list">` of `/doc/<path>` links.
     static func linkList(_ links: [(path: String, title: String)]) -> String {
         let items = links.map { link in
-            "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(link.path)))\">\(escapeHTML(link.title))</a></li>"
+            "<li><a href=\"\(escapeHTML(WebDocPath.href(link.path)))\">\(escapeHTML(link.title))</a></li>"
         }
         return "<ul class=\"link-list\">\(items.joined())</ul>"
     }

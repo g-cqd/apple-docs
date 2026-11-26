@@ -1,3 +1,5 @@
+import AppleDocsCore
+
 /// Builds safe SQLite FTS5 `MATCH` expressions from user queries.
 ///
 /// - Splits qualified Swift/Obj-C identifiers on `.`, `_`, `:`, `/`, `\` into OR'd prefix terms
@@ -25,11 +27,23 @@ public enum FTSQueryBuilder: Sendable {
     public static func buildLexicalQuery(_ query: String) -> String {
         let trimmed = trimWhitespace(query)
         guard !trimmed.isEmpty else { return "\"\"" }
-        if containsExplicitOperators(trimmed) {
+        // Explicit FTS5 syntax passes through (Bun parity) only when its quotes balance; otherwise the quotes are
+        // dropped and the text is treated as plain words, so user input can never leave a string unterminated.
+        if containsExplicitOperators(trimmed), trimmed.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0 {
             return trimmed
         }
+        return plainWordsQuery(trimmed.replacingScalars("\"", with: " "))
+    }
 
-        let words = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    /// The word-group query for `text`, ignoring any FTS5 syntax it contains (the engine's fallback when explicit
+    /// syntax is rejected by SQLite).
+    public static func plainWordsQuery(_ text: String) -> String {
+        let operators: Set<Substring> = ["AND", "OR", "NOT"]
+        let tokens: [Substring] = text.replacingScalars("\"", with: " ")
+            .split { (character: Character) -> Bool in
+                character.isWhitespace
+            }
+        let words: [String] = tokens.filter { !operators.contains($0) }.map(String.init)
         let groups = words.compactMap(buildWordGroup)
         return groups.isEmpty ? "\"\"" : groups.joined(separator: " ")
     }
@@ -42,19 +56,22 @@ public enum FTSQueryBuilder: Sendable {
             CharacterSetCheck.isWordOrSpace(scalar)
         }
         if isPlain { return trimmed }
-        let escaped = trimmed.replacing("\"", with: "\"\"")
+        let escaped = trimmed.replacingScalars("\"", with: "\"\"")
         return "\"\(escaped)\""
     }
 
     private static func containsExplicitOperators(_ query: String) -> Bool {
-        if query.contains("\"") { return true }
+        if query.containsScalar("\"") { return true }
         let tokens = query.split(whereSeparator: { $0.isWhitespace })
         return tokens.contains { $0 == "AND" || $0 == "OR" || $0 == "NOT" }
     }
 
     private static func buildWordGroup(_ word: String) -> String? {
         let separators: Set<Character> = [".", "_", ":", "/", "\\"]
+        // Only segments the unicode61 tokenizer turns into tokens: a punctuation-only prefix term (`"("*`) is an
+        // FTS5 syntax error.
         let segments = word.split(whereSeparator: { separators.contains($0) }).map(String.init)
+            .filter { $0.contains { $0.isLetter || $0.isNumber } }
         guard !segments.isEmpty else { return nil }
 
         var prefixTerms: [String] = []
@@ -108,7 +125,7 @@ public enum FTSQueryBuilder: Sendable {
     }
 
     private static func escapeFTS(_ token: String) -> String {
-        token.replacing("\"", with: "\"\"")
+        token.replacingScalars("\"", with: "\"\"")
     }
 }
 

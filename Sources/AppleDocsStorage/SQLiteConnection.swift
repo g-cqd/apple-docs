@@ -12,13 +12,37 @@ public final class SQLiteConnection {
 
     /// Opens a SQLite database at `path` (or `":memory:"`) applying `options`.
     public init(path: String, options: SQLiteOpenOptions = .readWrite) throws(SQLiteError) {
+        let isInMemory = path == ":memory:"
+        switch options.mode {
+            case .readWriteCreate:
+                self.handle = try Self.open(
+                    path,
+                    flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
+                )
+                if options.enableWAL, !isInMemory { persistWAL() }
+                try configure(options: options, isInMemory: isInMemory)
+            case .readOnly:
+                // A WAL database whose `-wal`/`-shm` were removed by its last writer cannot be opened with
+                // SQLITE_OPEN_READONLY (the connection may not create them). Readers therefore open read-write and
+                // enforce `query_only`, falling back to a true read-only open when the file is not writable.
+                if let writable = try? Self.open(path, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX) {
+                    self.handle = writable
+                    do {
+                        try executeScript("PRAGMA query_only = ON;")
+                        try configure(options: options, isInMemory: isInMemory)
+                        return
+                    } catch {
+                        close()
+                    }
+                }
+                self.handle = try Self.open(path, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX)
+                try configure(options: options, isInMemory: isInMemory)
+        }
+    }
+
+    private static func open(_ path: String, flags: Int32) throws(SQLiteError) -> OpaquePointer {
         var db: OpaquePointer?
-        let baseFlags: Int32 =
-            switch options.mode {
-                case .readOnly: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX
-                case .readWriteCreate: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
-            }
-        let rc = unsafe sqlite3_open_v2(path, &db, baseFlags, nil)
+        let rc = unsafe sqlite3_open_v2(path, &db, flags, nil)
         guard rc == SQLITE_OK, let opened = db else {
             let error = SQLiteError.fromHandle(db, code: rc)
             if let db {
@@ -26,8 +50,15 @@ public final class SQLiteConnection {
             }
             throw error
         }
-        self.handle = opened
-        try configure(options: options, isInMemory: path == ":memory:")
+        return opened
+    }
+
+    /// Keeps `-wal`/`-shm` on disk when the last writer closes, so read-only deployments (read-only mounts,
+    /// other users) can still open the corpus.
+    private func persistWAL() {
+        guard let db = handle else { return }
+        var enabled: Int32 = 1
+        _ = unsafe sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &enabled)
     }
 
     deinit {
@@ -116,8 +147,11 @@ public final class SQLiteConnection {
     /// Writes a self-contained compacted snapshot copy via `VACUUM INTO ?` using file-backed
     /// `temp_store = FILE` to avoid RAM spikes on multi-GB corpora.
     public func vacuumInto(destinationPath: String) throws(SQLiteError) {
-        try executeScript("PRAGMA temp_store = FILE;")
-        defer { try? executeScript("PRAGMA temp_store = MEMORY;") }
+        // Readers run with `query_only`, which also refuses `VACUUM INTO` even though it only writes the
+        // destination; lift it for this one statement and restore the previous value.
+        let queryOnly = try queryOne("PRAGMA query_only")?.integer(at: 0) == 1
+        try executeScript("PRAGMA temp_store = FILE; PRAGMA query_only = OFF;")
+        defer { try? executeScript("PRAGMA temp_store = MEMORY; PRAGMA query_only = \(queryOnly ? "ON" : "OFF");") }
         try execute("VACUUM INTO ?", bindings: [.text(destinationPath)])
     }
 

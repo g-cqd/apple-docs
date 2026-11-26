@@ -35,18 +35,13 @@ public final class CorpusReaderHandle: Sendable {
         try await pool.withConnection(body)
     }
 
-    /// Runs a read-only ``CorpusStore`` closure on a detached task.
+    /// Runs a read-only ``CorpusStore`` closure over a pooled connection (no per-call open).
     public func withStore<T: Sendable>(
         _ body: @escaping @Sendable (CorpusStore) throws -> T
     ) async throws -> T {
-        let path = databasePath
-        return
-            try await Task.detached {
-                let store = try CorpusStore(path: path, options: .readOnly)
-                defer { store.close() }
-                return try body(store)
-            }
-            .value
+        try await pool.withConnection { connection in
+            try body(CorpusStore(borrowing: connection))
+        }
     }
 
     /// Returns lazily loaded `(Model2VecEmbedder, SemanticCorpusIndex)` if available on disk, else `nil`.

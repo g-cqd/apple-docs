@@ -68,7 +68,7 @@ extension WebHTTPResponder {
                             on: connection
                         )
                     }
-                    let paths = (["/doc/\(slug)"] + keys.filter { $0 != slug }.map { "/doc/\(WebDocPath.safeKey($0))" })
+                    let paths = (["/doc/\(slug)"] + keys.filter { $0 != slug }.map { WebDocPath.href($0) })
                     xml = WebSitemap.urlSetXML(baseURL: site.baseURL, paths: paths)
                 }
             }

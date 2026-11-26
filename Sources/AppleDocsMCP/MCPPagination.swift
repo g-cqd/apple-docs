@@ -109,21 +109,33 @@ enum MCPPagination {
         maxChars: Int,
         build: ([JSONValue], Int, Int) -> JSONValue
     ) throws(ItemTooLarge) -> [JSONValue] {
-        if items.isEmpty {
-            let empty = build([], 1, 1)
+        try rangePages(count: items.count, totalPages: totalPages, maxChars: maxChars) { range, page, total in
+            build(Array(items[range]), page, total)
+        }
+    }
+
+    /// The greedy page split over item ranges (`buildArrayPages`), for builders that index precomputed data.
+    static func rangePages(
+        count: Int,
+        totalPages: Int,
+        maxChars: Int,
+        build: (Range<Int>, Int, Int) -> JSONValue
+    ) throws(ItemTooLarge) -> [JSONValue] {
+        if count == 0 {
+            let empty = build(0 ..< 0, 1, 1)
             if length(empty) > maxChars { throw ItemTooLarge(itemIndex: 0) }
             return [empty]
         }
         var pages: [JSONValue] = []
         var start = 0
         var pageIndex = 1
-        while start < items.count {
+        while start < count {
             var low = start + 1
-            var high = items.count
+            var high = count
             var best = start
             while low <= high {
                 let mid = (low + high) / 2
-                if length(build(Array(items[start ..< mid]), pageIndex, totalPages)) <= maxChars {
+                if length(build(start ..< mid, pageIndex, totalPages)) <= maxChars {
                     best = mid
                     low = mid + 1
                 } else {
@@ -131,7 +143,7 @@ enum MCPPagination {
                 }
             }
             if best == start { throw ItemTooLarge(itemIndex: start) }
-            pages.append(build(Array(items[start ..< best]), pageIndex, totalPages))
+            pages.append(build(start ..< best, pageIndex, totalPages))
             start = best
             pageIndex += 1
         }

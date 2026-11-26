@@ -66,27 +66,28 @@ extension MCPPagination {
     /// Section bucketing, splitting an oversized section until it fits; `nil` falls back to text windows.
     private static func sectionPlan(_ base: Object, sections: [JSONValue], maxChars: Int) -> [JSONValue]? {
         var units = sections.map(DocumentSectionRecordJS.init)
+        // Sections render once per plan; candidate pages only re-assemble them (Bun re-renders every probe).
+        var rendered = units.map { BunMarkdownRenderer.renderSection($0.record) }
         var assumed = 1
         var strategy = "sections"
         var result: [JSONValue]?
         for _ in 0 ..< maxPlanIterations {
             do {
                 let unitCount = units.count
-                let pages = try arrayPages(
-                    items: units.map(\.json),
-                    totalPages: assumed,
-                    maxChars: maxChars
-                ) { slice, index, total in
+                let pages = try rangePages(count: units.count, totalPages: assumed, maxChars: maxChars) {
+                    range,
+                    index,
+                    total in
                     documentPage(
                         base,
-                        slice: slice,
+                        rendered: rendered[range],
                         info: PageInfo(
                             page: index,
                             totalPages: total,
                             maxChars: maxChars,
                             strategy: strategy,
                             totalSections: unitCount,
-                            pageSections: slice.count
+                            pageSections: range.count
                         )
                     )
                 }
@@ -100,6 +101,10 @@ extension MCPPagination {
                 let split = splitOversized(oversized, target: target)
                 if split.count <= 1 { return nil }
                 units.replaceSubrange(error.itemIndex ... error.itemIndex, with: split)
+                rendered.replaceSubrange(
+                    error.itemIndex ... error.itemIndex,
+                    with: split.map { BunMarkdownRenderer.renderSection($0.record) }
+                )
                 assumed = max(assumed, 1)
                 strategy = "section-fragments"
                 result = nil
@@ -109,7 +114,7 @@ extension MCPPagination {
     }
 
     /// `buildDocumentPagePayload`: the page's sections re-rendered (front matter and title on page 1 only).
-    private static func documentPage(_ base: Object, slice: [JSONValue], info: PageInfo) -> JSONValue {
+    private static func documentPage(_ base: Object, rendered: ArraySlice<String>, info: PageInfo) -> JSONValue {
         let metadata = base["metadata"]
         func field(_ key: String) -> String? {
             if case .string(let text)? = MCPPayloadProjection.member(metadata, key) { return text }
@@ -123,10 +128,9 @@ extension MCPPagination {
             roleHeading: field("roleHeading"),
             platformsJSON: nil
         )
-        let records = slice.map { DocumentSectionRecordJS(json: $0).record }
-        let content = BunMarkdownRenderer.render(
+        let content = BunMarkdownRenderer.assemble(
             header,
-            sections: records,
+            renderedSections: Array(rendered),
             includeFrontMatter: info.page == 1,
             includeTitle: info.page == 1
         )

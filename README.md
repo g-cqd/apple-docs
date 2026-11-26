@@ -40,6 +40,7 @@ security headers, `Date`, `ETag`/`304` validators, and Brotli/gzip content codin
 - [`docs/quality.md`](docs/quality.md) — enforced compiler, lint, structure, and static-analyzer gates.
 - [`docs/threat-model.md`](docs/threat-model.md) — trust boundaries, security invariants, and threat register.
 - [`SECURITY.md`](SECURITY.md) — vulnerability disclosure and release verification.
+- [`docs/verification.md`](docs/verification.md) — Bun parity checks, fuzzing, and benchmarks.
 
 ## License
 

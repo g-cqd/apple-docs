@@ -13,7 +13,7 @@ extension MCPServerDispatcher {
             return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Missing tool name."))
         }
         do {
-            let payload = try await invokeTool(name: name, arguments: params["arguments"])
+            let payload = try await cachedTool(name: name, arguments: params["arguments"])
             // Bun `createMcpTextResult`: the projected payload as compact JSON text plus `structuredContent`.
             return .success(
                 .object([
@@ -29,6 +29,24 @@ extension MCPServerDispatcher {
             // Tool failures are results with `isError` (MCP SDK behaviour Bun relies on), not protocol errors.
             return .success(Self.toolError(Self.message(for: error)))
         }
+    }
+
+    /// `cache.wrap`: serves a cached projected payload, else runs the tool and caches its result (negative
+    /// results — not found, no hits — only for the negative TTL).
+    private func cachedTool(name: String, arguments: JSON) async throws -> JSONValue {
+        guard let toolCache, let key = toolCache.key(tool: name, arguments: JSONValue(arguments)) else {
+            return try await invokeTool(name: name, arguments: arguments)
+        }
+        if let hit = toolCache.lookup(key, tool: name) { return hit }
+        let payload = try await invokeTool(name: name, arguments: arguments)
+        toolCache.store(payload, for: key, tool: name, negative: Self.isNegative(payload))
+        return payload
+    }
+
+    private static func isNegative(_ payload: JSONValue) -> Bool {
+        if case .bool(false)? = MCPPayloadProjection.member(payload, "found") { return true }
+        if case .array(let results)? = MCPPayloadProjection.member(payload, "results"), results.isEmpty { return true }
+        return false
     }
 
     static func toolError(_ message: String) -> JSONValue {

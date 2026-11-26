@@ -39,6 +39,24 @@ public enum BunMarkdownRenderer {
         includeFrontMatter: Bool = true,
         includeTitle: Bool = true
     ) -> String {
+        let ordered = sections.enumerated()
+            .sorted { ($0.element.sortOrder, $0.offset) < ($1.element.sortOrder, $1.offset) }
+        return assemble(
+            header,
+            renderedSections: ordered.map { renderSection($0.element) },
+            includeFrontMatter: includeFrontMatter,
+            includeTitle: includeTitle
+        )
+    }
+
+    /// The page around already-rendered sections (in order; empty strings are skipped), so paginators can render
+    /// each section once and assemble many candidate pages.
+    public static func assemble(
+        _ header: Header,
+        renderedSections: [String],
+        includeFrontMatter: Bool,
+        includeTitle: Bool
+    ) -> String {
         var parts: [String] = []
         if includeFrontMatter {
             parts.append(frontMatter(header))
@@ -48,19 +66,15 @@ public enum BunMarkdownRenderer {
             parts.append("# \(title)")
             parts.append("")
         }
-        let ordered = sections.enumerated()
-            .sorted { ($0.element.sortOrder, $0.offset) < ($1.element.sortOrder, $1.offset) }
-        for (_, section) in ordered {
-            let rendered = renderSection(section)
-            if !rendered.isEmpty {
-                parts.append(rendered)
-                parts.append("")
-            }
+        for rendered in renderedSections where !rendered.isEmpty {
+            parts.append(rendered)
+            parts.append("")
         }
         return DocCPlainText.trimmed(collapseBlankLines(parts.joined(separator: "\n"))) + "\n"
     }
 
-    static func renderSection(_ section: DocumentSectionRecord) -> String {
+    /// One section's Markdown block (empty when it renders nothing).
+    public static func renderSection(_ section: DocumentSectionRecord) -> String {
         switch section.sectionKind {
             case "abstract": return DocCPlainText.trimmed(section.contentText)
             case "declaration": return declaration(section)

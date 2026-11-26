@@ -1,4 +1,5 @@
 import AemiJSONCore
+import AppleDocsCore
 import Foundation
 
 /// Renders DocC block and inline render-node trees into compact Markdown-flavoured text.
@@ -135,7 +136,7 @@ enum DocCContentRenderer {
             item["overridingTitle"].string ?? item["_resolvedTitle"].string ?? refs[id]["title"].string
             ?? referenceTitle(id, refs: refs)
         guard let key = item["_resolvedKey"].string, !key.isEmpty else { return title }
-        let safeTitle = title.replacing("[", with: "(").replacing("]", with: ")")
+        let safeTitle = title.replacingScalars(["[": "(", "]": ")"])
         return "[\(safeTitle)](\(key))"
     }
 

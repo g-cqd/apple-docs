@@ -53,6 +53,27 @@ struct CorpusSearchEngineTests {
         #expect(bodyHits.first?.confidence == .approximate)
     }
 
+    /// libFuzzer crash-e6acfcd0 (`FuzzFTSQuery`): explicit FTS5 syntax with an unbalanced quote.
+    @Test func `malformed explicit FTS5 syntax degrades to word search instead of failing`() throws {
+        // libFuzzer crash-dafee046: `"` fused with a combining mark (U+07FD) was escaped grapheme-wise.
+        let inputs = [
+            #"Naviga;ignSta path" OR NOT x* (y)"#, "\u{0742}\u{FFFD}v\u{FFFD}J", "\u{FFFD}if:\":\"\"\u{07FD}::",
+            "a \"\u{0301}b"
+        ]
+        for input in inputs {
+            let lexical = FTSQueryBuilder.buildLexicalQuery(input)
+            let trigram = FTSQueryBuilder.sanitizeTrigramQuery(input)
+            #expect(lexical.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0, "\(lexical)")
+            #expect(trigram.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0, "\(trigram)")
+        }
+        let store = try seedNavigationCorpus()
+        defer { store.close() }
+        for query in [#"Navigation "path OR x*"#, "NavigationStack AND (", "NOT NOT", #"""""#] {
+            let hits = try CorpusSearchEngine.search(CorpusSearchRequest(query: query), on: store.connection)
+            if query.hasPrefix("NavigationStack") { #expect(!hits.isEmpty, "\(query)") }
+        }
+    }
+
     @Test func `indexes symbols in AemiSearch SymbolMemoryIndex with typo expansion and snapshot round-trip`() throws {
         let index = SymbolMemoryIndex()
         index.add(

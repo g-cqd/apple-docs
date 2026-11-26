@@ -36,7 +36,7 @@ extension WebHTMLRenderer {
                     let doc = result.document
                     let abstract = doc.abstract.map { "<p>\(WebMarkdownBlockRenderer.renderInline($0))</p>" } ?? ""
                     return
-                        "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(doc.path)))\">\(escapeHTML(doc.title))</a>"
+                        "<li><a href=\"\(escapeHTML(WebDocPath.href(doc.path)))\">\(escapeHTML(doc.title))</a>"
                         + "<span class=\"badge\">\(escapeHTML(doc.framework))</span>\(abstract)</li>"
                 }
                 body += "<ul class=\"results\">\(items.joined())</ul>"

@@ -2,6 +2,7 @@ public import AemiJSONCore
 public import AemiJSONRPC
 import AppleDocsCommands
 import AppleDocsCore
+import Foundation
 import OrderedCollections
 
 /// Cross-platform MCP server dispatcher handling JSON-RPC 2.0 requests (`initialize`, `ping`,
@@ -14,6 +15,8 @@ public final class MCPServerDispatcher: Sendable {
     let reader: CorpusReaderHandle
     let markdownCache: BoundedLRUCache<String, String>
     let renderPermits: AsyncPermitPool
+    /// Tool result cache (`nil` when `APPLE_DOCS_MCP_CACHE=off`).
+    let toolCache: MCPToolCache?
 
     /// Creates a dispatcher backed by `databasePath` with bounded reader pool, LRU cache, and render concurrency cap.
     public init(
@@ -30,6 +33,11 @@ public final class MCPServerDispatcher: Sendable {
         )
         self.markdownCache = BoundedLRUCache(capacity: cacheCapacity)
         self.renderPermits = AsyncPermitPool(limit: maxConcurrentRenders)
+        let stamp = CorpusStamp(databasePath: databasePath)
+        self.toolCache =
+            ProcessInfo.processInfo.environment["APPLE_DOCS_MCP_CACHE"] == "off"
+            ? nil
+            : MCPToolCache(stamp: { stamp.current() }, now: { CorpusStamp.monotonicMilliseconds() })
     }
 
     /// Closes pooled SQLite readers and clears caches cleanly on shutdown.

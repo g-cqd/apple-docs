@@ -4,6 +4,7 @@ public import AppleDocsCore
 /// reads, section management, relationship queries, and root listings.
 public final class CorpusStore {
     public let connection: SQLiteConnection
+    private let ownsConnection: Bool
 
     /// Opens (or initializes) a Swift v1 corpus database at `path`.
     public init(path: String, options: SQLiteOpenOptions = .readWrite) throws(SQLiteError) {
@@ -15,14 +16,23 @@ public final class CorpusStore {
             } else if version != CorpusSchemaV1.userVersion {
                 conn.close()
                 throw .unsupportedSchema(found: version)
+            } else {
+                try CorpusSchemaV1.addMissingColumns(on: conn)
             }
         }
         self.connection = conn
+        self.ownsConnection = true
     }
 
-    /// Closes the underlying connection.
+    /// A store over a connection someone else owns (a reader pool's): ``close()`` leaves it open.
+    public init(borrowing connection: SQLiteConnection) {
+        self.connection = connection
+        self.ownsConnection = false
+    }
+
+    /// Closes the underlying connection (when this store opened it).
     public func close() {
-        connection.close()
+        if ownsConnection { connection.close() }
     }
 
     /// Upserts a documentation root entry.

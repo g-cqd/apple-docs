@@ -14,12 +14,16 @@ struct DocumentSectionRecordJS {
         self.text = JSText(content ?? "")
     }
 
-    var record: DocumentSectionRecord {
+    var record: DocumentSectionRecord { Self.record(from: json) }
+
+    /// The renderer's view of a coerced section, read straight from its JSON (no UTF-16 round trip).
+    static func record(from json: JSONValue) -> DocumentSectionRecord {
         guard case .object(let object) = json else { return DocumentSectionRecord(sectionKind: "", contentText: "") }
         let order: Int = if case .int(let value)? = object["sortOrder"] { Int(value) } else { 0 }
         let heading: String? = if case .string(let value)? = object["heading"] { value } else { nil }
         let kind: String = if case .string(let value)? = object["sectionKind"] { value } else { "" }
-        return DocumentSectionRecord(sectionKind: kind, heading: heading, contentText: text.string, sortOrder: order)
+        let text: String = if case .string(let value)? = object["contentText"] { value } else { "" }
+        return DocumentSectionRecord(sectionKind: kind, heading: heading, contentText: text, sortOrder: order)
     }
 
     /// `{...section, contentText, contentJson: null}`.

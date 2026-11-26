@@ -54,7 +54,10 @@ extension WebHTTPResponder {
         var rawKey = Substring(path.dropFirst("/doc/".count))
         while rawKey.hasSuffix("/") { rawKey = rawKey.dropLast() }
         if rawKey.hasSuffix("/index.html") { rawKey = rawKey.dropLast("/index.html".count) }
-        let requested = String(rawKey)
+        // Links percent-encode keys (`WebDocPath.href`): decode exactly once.
+        guard let requested = String(rawKey).removingPercentEncoding else {
+            return htmlResponse(WebHTMLRenderer.renderNotFoundPage(path: path), status: .badRequest)
+        }
         let resolved: String? =
             WebDocPath.containsHashedSegment(requested)
             ? try await reader.withConnection { connection in

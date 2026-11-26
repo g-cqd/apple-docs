@@ -63,7 +63,7 @@ extension WebHTMLRenderer {
             let title = group.title.map { "<h3>\(escapeHTML($0))</h3>" } ?? ""
             let items = group.items.map { item in
                 item.isAvailable
-                    ? "<li><a href=\"/doc/\(escapeHTML(WebDocPath.safeKey(item.path)))\">\(escapeHTML(item.title))</a></li>"
+                    ? "<li><a href=\"\(escapeHTML(WebDocPath.href(item.path)))\">\(escapeHTML(item.title))</a></li>"
                     : "<li>\(escapeHTML(item.title))</li>"
             }
             return "\(title)<ul class=\"link-list\">\(items.joined())</ul>"
@@ -80,7 +80,7 @@ extension WebHTMLRenderer {
         }
         crumbs.append((view.frameworkName, "/doc/\(segments[0])"))
         for index in 1 ..< (segments.count - 1) {
-            crumbs.append((segments[index], "/doc/" + WebDocPath.safeKey(segments[0 ... index].joined(separator: "/"))))
+            crumbs.append((segments[index], WebDocPath.href(segments[0 ... index].joined(separator: "/"))))
         }
         crumbs.append((view.title, nil))
         return crumbs

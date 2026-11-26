@@ -1,4 +1,5 @@
 public import AemiJSONCore
+import AppleDocsCore
 public import AppleDocsStorage
 import Foundation
 import OrderedCollections
@@ -62,7 +63,7 @@ extension ToolPayloads {
                 !(character.isASCII && (character.isLetter || character.isNumber || "_.-".contains(character)))
             }
             .prefix(8)
-            .map { "\"\($0.replacing("\"", with: "\"\""))\"*" }
+            .map { "\"\(String($0).replacingScalars("\"", with: "\"\""))\"*" }
         return terms.isEmpty ? "\"\"" : terms.joined(separator: " OR ")
     }
 }

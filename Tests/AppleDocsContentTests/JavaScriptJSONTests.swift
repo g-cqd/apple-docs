@@ -20,5 +20,7 @@ struct JavaScriptJSONTests {
             #"{"a":"x\"y\\\n\u0001é/\#u{2028}\t","b":[1,2.5,null,true,0,1e+21,0.000001,123456789012],"c":{},"d":[]}"#
         #expect(JavaScriptJSON.stringify(value) == expected)
         #expect(JavaScriptJSON.length(.string("é😀")) == 5)
+        #expect(JavaScriptJSON.length(value) == JavaScriptJSON.stringify(value).utf16.count)
+        #expect(JavaScriptJSON.length(.array([])) == 2 && JavaScriptJSON.length(.object([:])) == 2)
     }
 }

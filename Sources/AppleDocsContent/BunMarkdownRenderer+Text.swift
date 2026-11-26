@@ -1,4 +1,5 @@
 import AemiJSONCore
+import AppleDocsCore
 import Foundation
 
 /// Front matter and string helpers mirroring Bun's `lib/yaml.js` and `render-markdown.js` utilities.
@@ -23,13 +24,14 @@ extension BunMarkdownRenderer {
 
     /// `quoteIfNeeded`: YAML-quotes empty, boolean/null-like, numeric, special-character, or multi-line values.
     static func quoteIfNeeded(_ value: String) -> String {
-        let special = ":{}[],&*?|>!%#@`\"'"
-        let numeric = !value.isEmpty && value.allSatisfy { $0 == "." || ($0.isASCII && $0.isNumber) }
+        // Per scalar, like Bun's regexes: a special character followed by a combining mark still counts.
+        let special = Set(":{}[],&*?|>!%#@`\"'\n".unicodeScalars)
+        let numeric = !value.isEmpty && value.unicodeScalars.allSatisfy { $0 == "." || ("0" ... "9").contains($0) }
         let needsQuotes =
             value.isEmpty || ["true", "false", "null"].contains(value) || numeric
-            || value.contains(where: { special.contains($0) }) || value.contains("\n")
+            || value.unicodeScalars.contains(where: special.contains)
         guard needsQuotes else { return value }
-        return "\"" + value.replacing("\\", with: "\\\\").replacing("\"", with: "\\\"") + "\""
+        return "\"" + value.replacingScalars(["\\": "\\\\", "\"": "\\\""]) + "\""
     }
 
     /// `formatPlatforms`: `{"ios":"16.0",…}` → `["iOS 16.0+", …]` (a version-less entry prints its name alone).
@@ -65,18 +67,20 @@ extension BunMarkdownRenderer {
 
     /// `/\n{3,}/g → "\n\n"`.
     static func collapseBlankLines(_ text: String) -> String {
-        var out = ""
+        // Byte-level: `\n` is ASCII and never part of a multi-byte UTF-8 sequence.
+        var out: [UInt8] = []
+        out.reserveCapacity(text.utf8.count)
         var newlines = 0
-        for character in text {
-            if character == "\n" {
+        for byte in text.utf8 {
+            if byte == 0x0A {
                 newlines += 1
-                if newlines <= 2 { out.append(character) }
+                if newlines <= 2 { out.append(byte) }
             } else {
                 newlines = 0
-                out.append(character)
+                out.append(byte)
             }
         }
-        return out
+        return String(decoding: out, as: UTF8.self)
     }
 
     /// `/\s+/g → " "`.

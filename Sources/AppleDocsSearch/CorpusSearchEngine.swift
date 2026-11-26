@@ -29,7 +29,18 @@ public enum CorpusSearchEngine: Sendable {
 
         let ftsExpr = FTSQueryBuilder.buildLexicalQuery(trimmed)
         for tier in virtualTiers(trimmed: trimmed, ftsExpr: ftsExpr, limit: request.limit) {
-            let hits = try queryVirtualTier(tier, filter: filter, on: connection)
+            let hits: [CorpusSearchHit]
+            do {
+                hits = try queryVirtualTier(tier, filter: filter, on: connection)
+            } catch .sqlite(code: 1, _) where tier.matchExpr == ftsExpr {
+                // FTS5 rejected the user's explicit syntax (`SQLITE_ERROR`): retry the tier as plain words.
+                // A tier FTS5 still rejects contributes nothing, as in Bun's `safeCall`-wrapped cascade.
+                var plain = tier
+                plain.matchExpr = FTSQueryBuilder.plainWordsQuery(trimmed)
+                hits =
+                    plain.matchExpr == "\"\""
+                    ? [] : (try? queryVirtualTier(plain, filter: filter, on: connection)) ?? []
+            }
             appendTier(hits, into: &results, seen: &seen, limit: request.limit)
             if results.count >= request.limit { break }
         }
@@ -209,7 +220,7 @@ private struct VirtualTierSpec {
     let table: String
     let scoreExpression: String
     let tieBreaker: String
-    let matchExpr: String
+    var matchExpr: String
     let limit: Int
     let confidence: SearchConfidence
 }

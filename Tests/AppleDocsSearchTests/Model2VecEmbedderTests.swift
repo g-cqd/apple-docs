@@ -1,4 +1,4 @@
-import AemiProtobufCore
+import AemiProtobuf
 import AemiSearch
 import AppleDocsCore
 import AppleDocsSearch

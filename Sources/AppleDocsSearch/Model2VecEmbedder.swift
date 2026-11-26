@@ -1,4 +1,4 @@
-import AemiProtobufCore
+import AemiProtobuf
 import Foundation
 
 /// Static `model2vec` embedding matrix loader & encoder supporting both:

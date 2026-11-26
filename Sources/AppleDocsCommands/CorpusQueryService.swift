@@ -168,9 +168,6 @@ public enum CorpusQueryService: Sendable {
     }
 
     static func escapeLike(_ value: String) -> String {
-        value
-            .replacing("\\", with: "\\\\")
-            .replacing("%", with: "\\%")
-            .replacing("_", with: "\\_")
+        value.replacingScalars(["\\": "\\\\", "%": "\\%", "_": "\\_"])
     }
 }

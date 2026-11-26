@@ -61,15 +61,13 @@ let package = Package(
         ),
         .target(
             name: "AppleDocsCore",
-            dependencies: [
-                .product(name: "AemiKernel", package: "aemi"), .product(name: "AemiDigest", package: "aemi")
-            ],
+            dependencies: [],
             path: "Sources/AppleDocsCore",
             swiftSettings: strictSettings
         ),
         .target(
             name: "AppleDocsStorage",
-            dependencies: ["AppleDocsCore", "CSQLite", "CAppleDocsZstd", .product(name: "AemiIO", package: "aemi")],
+            dependencies: ["AppleDocsCore", "CSQLite", "CAppleDocsZstd"],
             path: "Sources/AppleDocsStorage",
             resources: [.process("Resources")],
             swiftSettings: strictSettings
@@ -78,10 +76,9 @@ let package = Package(
             name: "AppleDocsContent",
             dependencies: [
                 "AppleDocsCore", .product(name: "AemiHTML", package: "AemiHTML"),
-                .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "AemiMarkdown", package: "AemiMarkdown"),
                 .product(name: "AemiYAML", package: "AemiHMMML"),
-                .product(name: "AemiLexers", package: "aemi"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsContent",
@@ -91,7 +88,8 @@ let package = Package(
             name: "AppleDocsSearch",
             dependencies: [
                 "AppleDocsCore", "AppleDocsStorage", .product(name: "AemiSearch", package: "AemiSearch"),
-                .product(name: "AemiProtobuf", package: "AemiProtobuf"), .product(name: "AemiJSON", package: "AemiJSON")
+                .product(name: "AemiProtobuf", package: "AemiProtobuf"),
+                .product(name: "AemiJSONCore", package: "AemiJSON")
             ],
             path: "Sources/AppleDocsSearch",
             swiftSettings: strictSettings
@@ -99,7 +97,7 @@ let package = Package(
         .target(
             name: "AppleDocsOutput",
             dependencies: [
-                "AppleDocsCore", .product(name: "AemiJSON", package: "AemiJSON"),
+                "AppleDocsCore", .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsOutput",
@@ -108,8 +106,7 @@ let package = Package(
         .target(
             name: "AppleDocsSources",
             dependencies: [
-                "AppleDocsCore", "AppleDocsContent", .product(name: "AemiJSON", package: "AemiJSON"),
-                .product(name: "AemiRegex", package: "AemiRegex"), .product(name: "AemiYAML", package: "AemiHMMML"),
+                "AppleDocsCore", .product(name: "AemiRegex", package: "AemiRegex"),
                 .product(name: "URLBuilder", package: "URLBuilder")
             ],
             path: "Sources/AppleDocsSources",
@@ -128,7 +125,7 @@ let package = Package(
         .target(
             name: "AppleDocsSetup",
             dependencies: [
-                "AppleDocsCore", "AppleDocsPipeline", "AppleDocsSearch", "AppleDocsStorage",
+                "AppleDocsCore", "AppleDocsStorage",
                 .product(name: "AemiDigest", package: "aemi"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "SystemPackage", package: "swift-system")
@@ -138,19 +135,16 @@ let package = Package(
         ),
         .target(
             name: "AppleDocsSetupDarwin",
-            dependencies: [
-                "AppleDocsCore", "AppleDocsSetup", "AppleDocsStorage",
-                .product(name: "Subprocess", package: "swift-subprocess")
-            ],
+            dependencies: ["AppleDocsSetup", "AppleDocsStorage"],
             path: "Sources/AppleDocsSetupDarwin",
             swiftSettings: strictSettings
         ),
         .target(
             name: "AppleDocsCommands",
             dependencies: [
-                "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput", "AppleDocsPipeline",
+                "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
                 "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsStorage",
-                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsCommands",
@@ -160,7 +154,7 @@ let package = Package(
             name: "AppleDocsMCP",
             dependencies: [
                 "AppleDocsCommands", "AppleDocsCore", "AppleDocsOutput", "AppleDocsSearch", "AppleDocsStorage",
-                .product(name: "AemiJSON", package: "AemiJSON"), .product(name: "AemiJSONRPC", package: "AemiJSON"),
+                .product(name: "AemiJSONCore", package: "AemiJSON"), .product(name: "AemiJSONRPC", package: "AemiJSON"),
                 .product(name: "AemiHTTP", package: "HTTP"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
@@ -173,8 +167,9 @@ let package = Package(
             dependencies: [
                 "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
                 "AppleDocsSearch", "AppleDocsStorage",
-                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON"),
-                .product(name: "Crypto", package: "swift-crypto")
+                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSONCore", package: "AemiJSON"),
+                .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsWeb",
             resources: [.process("Resources")],
@@ -193,13 +188,13 @@ let package = Package(
         ),
         .target(
             name: "AppleDocsTestSupport",
-            dependencies: ["AppleDocsCore"],
+            dependencies: [],
             path: "Tests/AppleDocsTestSupport",
             swiftSettings: strictSettings
         ),
         .testTarget(
             name: "AppleDocsQualityTests",
-            dependencies: ["AppleDocsCore", "AppleDocsTestSupport"],
+            dependencies: ["AppleDocsTestSupport"],
             path: "Tests/AppleDocsQualityTests",
             swiftSettings: strictSettings
         ),
@@ -207,21 +202,21 @@ let package = Package(
             name: "AppleDocsCoreTests",
             dependencies: [
                 "AppleDocsCore", "AppleDocsOutput", "AppleDocsSetup",
-                "AppleDocsSetupDarwin", "AppleDocsStorage", "AppleDocsTestSupport"
+                "AppleDocsSetupDarwin", "AppleDocsStorage"
             ],
             path: "Tests/AppleDocsCoreTests",
             swiftSettings: strictSettings
         ),
         .testTarget(
             name: "AppleDocsStorageTests",
-            dependencies: ["AppleDocsCore", "AppleDocsStorage", "AppleDocsTestSupport"],
+            dependencies: ["AppleDocsCore", "AppleDocsStorage"],
             path: "Tests/AppleDocsStorageTests",
             swiftSettings: strictSettings
         ),
         .testTarget(
             name: "AppleDocsSearchTests",
             dependencies: [
-                "AppleDocsCore", "AppleDocsSearch", "AppleDocsStorage", "AppleDocsTestSupport",
+                "AppleDocsCore", "AppleDocsSearch", "AppleDocsStorage",
                 .product(name: "AemiProtobuf", package: "AemiProtobuf"),
                 .product(name: "AemiSearch", package: "AemiSearch")
             ],
@@ -232,9 +227,10 @@ let package = Package(
             name: "AppleDocsMCPTests",
             dependencies: [
                 "AppleDocsCommands", "AppleDocsCore", "AppleDocsMCP", "AppleDocsOutput", "AppleDocsSearch",
-                "AppleDocsStorage", "AppleDocsTestSupport",
-                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON"),
-                .product(name: "AemiJSONRPC", package: "AemiJSON")
+                "AppleDocsStorage",
+                .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSONCore", package: "AemiJSON"),
+                .product(name: "AemiJSONRPC", package: "AemiJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Tests/AppleDocsMCPTests",
             swiftSettings: strictSettings
@@ -244,7 +240,7 @@ let package = Package(
             dependencies: [
                 "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput", "AppleDocsPipeline",
                 "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsSources",
-                "AppleDocsStorage", "AppleDocsTestSupport"
+                "AppleDocsStorage"
             ],
             path: "Tests/AppleDocsSetupTests",
             swiftSettings: strictSettings
@@ -253,7 +249,7 @@ let package = Package(
             name: "AppleDocsContentTests",
             dependencies: [
                 "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
-                .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Tests/AppleDocsContentTests",
@@ -263,7 +259,7 @@ let package = Package(
         .testTarget(
             name: "AppleDocsWebTests",
             dependencies: [
-                "AppleDocsCommands", "AppleDocsCore", "AppleDocsStorage", "AppleDocsWeb", "AppleDocsTestSupport",
+                "AppleDocsCommands", "AppleDocsCore", "AppleDocsStorage", "AppleDocsWeb",
                 .product(name: "AemiHTTP", package: "HTTP")
             ],
             path: "Tests/AppleDocsWebTests",

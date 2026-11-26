@@ -18,12 +18,20 @@ public enum CorpusSchemaV1: Sendable {
     }
 
     /// Columns added to v1 after its first release, applied to databases created before them (additive only).
+    // @dl:accept -- declarative column list (same tuple-array shape as WebAssetCatalog's manifest)
     static let addedColumns: [(table: String, column: String, definition: String)] = [
         ("documents", "platforms_json", "TEXT"),
         ("roots", "last_seen", "TEXT")
     ]
 
-    private static func addMissingColumns(on connection: SQLiteConnection) throws(SQLiteError) {
+    /// Indexes added to v1 after its first release (idempotent DDL).
+    static let addedIndexes = [
+        "CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);"
+    ]
+
+    /// Adds ``addedColumns`` and ``addedIndexes`` missing from an existing v1 database (every read-write open).
+    static func addMissingColumns(on connection: SQLiteConnection) throws(SQLiteError) {
+        for ddl in addedIndexes { try connection.executeScript(ddl) }
         for added in addedColumns {
             let existing = try connection.query("PRAGMA table_info(\(added.table))")
             let names = try existing.map { row throws(SQLiteError) in try row.text(at: 1) }

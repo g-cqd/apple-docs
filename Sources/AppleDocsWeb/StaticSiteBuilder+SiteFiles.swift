@@ -40,7 +40,7 @@ extension StaticSiteBuilder {
             "sitemaps/\(WebSitemap.rootSitemapSlug).xml"
         )
         for slug in slugs {
-            let paths = (byFramework[slug] ?? []).map { "/doc/\(WebDocPath.safeKey($0))" }
+            let paths = (byFramework[slug] ?? []).map { WebDocPath.href($0) }
             try write(WebSitemap.urlSetXML(baseURL: base, paths: paths), "sitemaps/\(slug).xml")
         }
         try writeAssetPages(databasePath: databasePath, output: output, resourcesDirectory: options.resourcesDirectory)

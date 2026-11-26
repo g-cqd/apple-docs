@@ -1,3 +1,4 @@
+import AppleDocsCore
 import Crypto
 
 /// Canonical web paths for document keys — a port of Bun's `safeWebDocKey` (`src/lib/safe-path.js`), so the
@@ -16,6 +17,26 @@ public enum WebDocPath {
         guard key.utf8.count > maxSegmentBytes else { return key }
         return key.split(separator: "/", omittingEmptySubsequences: false).map { safeSegment(String($0)) }
             .joined(separator: "/")
+    }
+
+    /// The URL path (`/doc/<key>`, site-relative) linking to `key`: ``safeKey(_:)`` with every byte outside the
+    /// RFC 3986 path character set percent-encoded (`%` itself included), so keys containing `%`, `?`, `#`, or
+    /// spaces round-trip through browsers and static hosts. Servers decode it exactly once.
+    public static func href(_ key: String) -> String {
+        "/doc/" + PercentEncoding.encode(safeKey(key), keeping: isPathSafe)
+    }
+
+    /// RFC 3986 `pchar` plus `/`: unreserved, sub-delims, `:` and `@`.
+    private static func isPathSafe(_ byte: UInt8) -> Bool {
+        switch byte {
+            case _ where PercentEncoding.isAlphanumeric(byte): true
+            case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"), UInt8(ascii: "/"): true
+            case UInt8(ascii: "!"), UInt8(ascii: "$"), UInt8(ascii: "&"), UInt8(ascii: "'"), UInt8(ascii: "("),
+                UInt8(ascii: ")"), UInt8(ascii: "*"), UInt8(ascii: "+"), UInt8(ascii: ","), UInt8(ascii: ";"),
+                UInt8(ascii: "="), UInt8(ascii: ":"), UInt8(ascii: "@"):
+                true
+            default: false
+        }
     }
 
     /// Whether `path` contains a hashed segment (and so needs ``resolve(_:candidates:)``).

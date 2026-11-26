@@ -1,0 +1,25 @@
+{
+ "metadata": {
+  "title": "PDFSelection"
+ },
+ "topicSections": [
+  {
+   "title": "Getting Information",
+   "identifiers": [
+    "doc://p/documentation/PDFKit/PDFSelection/color"
+   ]
+  },
+  {
+   "title": "Managing Drawing",
+   "identifiers": [
+    "doc://p/documentation/PDFKit/PDFSelection/color"
+   ]
+  }
+ ],
+ "references": {
+  "doc://p/documentation/PDFKit/PDFSelection/color": {
+   "title": "color",
+   "url": "/documentation/pdfkit/pdfselection/color"
+  }
+ }
+}

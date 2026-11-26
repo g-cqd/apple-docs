@@ -52,7 +52,7 @@ enum StaticSearchIndex {
         let object: OrderedDictionary<String, JSONValue> = [
             "v": .int(2),
             "frameworks": .array(frameworks.map(JSONValue.string)),
-            "keys": column { WebDocPath.safeKey($0.key) },
+            "keys": column { String(WebDocPath.href($0.key).dropFirst("/doc/".count)) },
             "titles": column(\.title),
             "abstracts": column(\.abstract),
             "fwIndices": .array(rows.map { .int(Int64($0.framework.flatMap { position[$0] } ?? -1)) }),

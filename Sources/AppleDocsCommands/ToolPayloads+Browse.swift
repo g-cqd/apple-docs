@@ -46,22 +46,25 @@ extension ToolPayloads {
         if request.year != nil, !isWWDC { throw ToolPayloadError("year only applies to the wwdc root") }
         if let path = request.path { return try children(of: path, root: root, on: connection) }
 
-        var pages = try pagesByRoot(root.slug, on: connection)
+        let limit = request.limit.map { max($0, 1) } ?? request.defaultLimit
+        // Non-WWDC roots only need the first `limit` pages and a count; WWDC groups and year filters need all.
+        var pages = try pagesByRoot(root.slug, limit: isWWDC ? nil : limit, on: connection)
+        let total = isWWDC || limit == nil ? pages.count : try pageCount(root.slug, on: connection)
         if isWWDC, let year = request.year {
             pages = pages.filter { $0.path.hasPrefix("wwdc/wwdc\(year)-") }
             if pages.isEmpty { throw ToolPayloadError("No WWDC sessions indexed for \(year)") }
         } else if isWWDC, request.limit == nil {
             return wwdcGroups(pages, root: root)
         }
-        let limit = request.limit.map { max($0, 1) } ?? request.defaultLimit
         let shown = limit.map { Array(pages.prefix($0)) } ?? pages
+        let matching = isWWDC ? pages.count : total
         var out: OrderedDictionary<String, JSONValue> = [
             "framework": .string(root.displayName), "slug": .string(root.slug), "kind": .string(root.kind)
         ]
         if let year = request.year { out["year"] = .int(Int64(year)) }
         out["pages"] = .array(shown.map(\.summary))
-        out["total"] = .int(Int64(pages.count))
-        out["limited"] = .bool(limit.map { $0 < pages.count } ?? false)
+        out["total"] = .int(Int64(matching))
+        out["limited"] = .bool(limit.map { $0 < matching } ?? false)
         return .object(out)
     }
 
@@ -90,14 +93,18 @@ extension ToolPayloads {
     }
 
     /// `getPagesByRoot`: crawled pages of a root by key, each as Bun's browse page object.
-    private static func pagesByRoot(_ slug: String, on connection: SQLiteConnection) throws(SQLiteError) -> [PageRow] {
+    private static func pagesByRoot(
+        _ slug: String,
+        limit: Int?,
+        on connection: SQLiteConnection
+    ) throws(SQLiteError) -> [PageRow] {
         try objects(
             """
             SELECT d.key, d.title, COALESCE(d.role_heading, d.role), d.abstract_text
             FROM documents d JOIN crawl_state c ON c.path = d.key
-            WHERE c.root_slug = ? AND c.status = 'done' ORDER BY d.key
+            WHERE c.root_slug = ? AND c.status = 'done' ORDER BY c.path LIMIT ?
             """,
-            bindings: [.text(slug)],
+            bindings: [.text(slug), .integer(Int64(limit ?? -1))],
             columns: [.text("path"), .text("title"), .optionalText("kind"), .optionalText("abstract")],
             on: connection
         )
@@ -106,6 +113,14 @@ extension ToolPayloads {
                 if case .object(let object) = page, case .string(let key)? = object["path"] { key } else { "" }
             return PageRow(path: path, summary: page)
         }
+    }
+
+    private static func pageCount(_ slug: String, on connection: SQLiteConnection) throws(SQLiteError) -> Int {
+        let row = try connection.queryOne(
+            "SELECT COUNT(*) FROM documents d JOIN crawl_state c ON c.path = d.key WHERE c.root_slug = ? AND c.status = 'done'",
+            bindings: [.text(slug)]
+        )
+        return Int(try row?.integer(at: 0) ?? 0)
     }
 
     private static func wwdcGroups(_ pages: [PageRow], root: Root) -> JSONValue {

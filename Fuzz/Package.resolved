@@ -1,0 +1,210 @@
+{
+  "originHash" : "50392edb15216f16336c13ab32419d93581f3a6290144b63ef53277706322cb5",
+  "pins" : [
+    {
+      "identity" : "aemi",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Aemi-Studio/aemi.git",
+      "state" : {
+        "revision" : "04cfb910446f446476c0c853317931f3444b1323"
+      }
+    },
+    {
+      "identity" : "aemihmmml",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiHMMML.git",
+      "state" : {
+        "revision" : "37aa42a4a121ad2e50177d5310794a44d46bb995"
+      }
+    },
+    {
+      "identity" : "aemihtml",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiHTML.git",
+      "state" : {
+        "revision" : "b430df36f2f7328cbaa4a49e3c0f0234fd0d365c"
+      }
+    },
+    {
+      "identity" : "aemijson",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiJSON.git",
+      "state" : {
+        "revision" : "a7bb9cc463fd1a7f58a404ce28dbbee6b7ee7fe7"
+      }
+    },
+    {
+      "identity" : "aemimarkdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiMarkdown.git",
+      "state" : {
+        "revision" : "4448cefa9eb7fc97e5f3161807631592d6f4ba29"
+      }
+    },
+    {
+      "identity" : "aemimermaid",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiMermaid.git",
+      "state" : {
+        "revision" : "1772f8251d33f207ae24fa7fbd9ea7821b572044"
+      }
+    },
+    {
+      "identity" : "aemiprotobuf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiProtobuf.git",
+      "state" : {
+        "revision" : "a6101980fe55ad2195bf1f6133fbe9fe7e8490b9"
+      }
+    },
+    {
+      "identity" : "aemiregex",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiRegex.git",
+      "state" : {
+        "revision" : "2b6cd82b452720dc2cb75cf56a6aa085a260415a"
+      }
+    },
+    {
+      "identity" : "aemisearch",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiSearch.git",
+      "state" : {
+        "revision" : "5ea4a7e4678bc562ec92209a0308f74595ffd6c6"
+      }
+    },
+    {
+      "identity" : "aemitextui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/AemiTextUI.git",
+      "state" : {
+        "revision" : "aebc2c6341367ee06f6fdc4a91fe81d41a12deee"
+      }
+    },
+    {
+      "identity" : "http",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/HTTP.git",
+      "state" : {
+        "revision" : "4d56dd0468f8087876bc5f33815858b6f42a5fbb"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
+      }
+    },
+    {
+      "identity" : "swift-asn1",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-asn1.git",
+      "state" : {
+        "revision" : "97fd57437fc94cfa6b62f2b8f84c50f433534e17",
+        "version" : "1.7.5"
+      }
+    },
+    {
+      "identity" : "swift-certificates",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-certificates.git",
+      "state" : {
+        "revision" : "ac5e08be49ab662815859ef1029b757fa857ae2c",
+        "version" : "1.21.2"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "88754449ab766a739610b660e117762115fabc9c",
+        "version" : "1.7.6"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "b0b1963823fe828065ef49c09c8c9489f43cf7be",
+        "version" : "5.2.0"
+      }
+    },
+    {
+      "identity" : "swift-distributed-tracing",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-distributed-tracing.git",
+      "state" : {
+        "revision" : "9f982a7ec8dd815bf57024e39de592813ca14399",
+        "version" : "1.7.4"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "revision" : "c7413d967b97aae67c46452bf7645bdb7b200e8e",
+        "version" : "1.17.2"
+      }
+    },
+    {
+      "identity" : "swift-metrics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-metrics.git",
+      "state" : {
+        "revision" : "5da0b6ea2a89dcce222eec559289e298d357d0a5",
+        "version" : "2.13.1"
+      }
+    },
+    {
+      "identity" : "swift-service-context",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-service-context.git",
+      "state" : {
+        "revision" : "853ba3d9ce78851b9cc20108e8bd4f13f7fa546c",
+        "version" : "1.5.1"
+      }
+    },
+    {
+      "identity" : "swift-subprocess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-subprocess.git",
+      "state" : {
+        "revision" : "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+        "version" : "1.0.2"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf",
+        "version" : "604.0.0"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system.git",
+      "state" : {
+        "revision" : "640e5755b5826f4437eaeedd366fd776737db62c",
+        "version" : "1.9.0"
+      }
+    },
+    {
+      "identity" : "urlbuilder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/URLBuilder.git",
+      "state" : {
+        "revision" : "ba70f7874bf163b3dbdaf12e43f33df700906aee"
+      }
+    }
+  ],
+  "version" : 3
+}

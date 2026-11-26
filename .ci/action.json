@@ -95,6 +95,36 @@
         "budget": 3600,
         "workspace": "copy"
       }
+    },
+    {
+      "id": "fuzz",
+      "title": "Verification · Fuzzing (libFuzzer + ASan)",
+      "run": "Fuzz/ci.sh",
+      "os": "linux",
+      "cadence": [
+        "nightly",
+        "dispatch"
+      ]
+    },
+    {
+      "id": "benchmarks",
+      "title": "Verification · Benchmarks (vs previous commit)",
+      "os": "macOS",
+      "cadence": [
+        "push",
+        "nightly"
+      ],
+      "paths": [
+        "Sources/**",
+        "Benchmarks/**"
+      ],
+      "benchmark": {
+        "package": "Benchmarks",
+        "metrics": [
+          "instructions",
+          "mallocCountTotal"
+        ]
+      }
     }
   ]
 }

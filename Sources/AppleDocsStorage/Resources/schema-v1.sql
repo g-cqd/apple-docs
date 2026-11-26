@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS crawl_state (
     error     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_crawl_root_status ON crawl_state(root_slug, status);
+CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);
 
 CREATE TABLE IF NOT EXISTS sync_checkpoint (
     key        TEXT PRIMARY KEY,
