@@ -29,7 +29,28 @@ Audit of `g-cqd/HTTP` (`974a50a`) revealed that several capabilities we initiall
 - **Change:** Promoted both types plus `HybridRetrievalTests` into `g-cqd/AemiSearch`.
 - **Verification:** All 11 tests across 3 suites pass on both macOS arm64 and Linux arm64 (`gcqd-dev`), with zero SwiftLint / `swift-format` findings.
 
+### 3. `g-cqd/HTTP` — `HTTPZstd` (PR #5)
+
+- **Change:** libzstd 1.5.7 vendored once in `g-cqd/HTTP` (`CHTTPZstd`, symbols hidden) behind `HTTPZstd`;
+  `apple-docs` dropped its own `CAppleDocsZstd` decoder and links that one copy (an in-house Swift codec was
+  prototyped in `aemi` and abandoned: 0.83–0.99× libzstd speed, levels 1–4 only).
+
+### 4. `g-cqd/HTTP` — outbound `HTTPClient` product (PR #6, `e18e598`)
+
+- **Gap observed:** `AppleDocsSources` crawled through `URLSession`, which on Linux is `FoundationNetworking`
+  (libcurl + the system OpenSSL) — a second HTTP and TLS stack in a binary that otherwise links neither.
+- **Change:** `g-cqd/HTTP` gained `HTTPClient` (its ADR 0011): a sans-I/O TLS 1.3 client sharing the server
+  engine's record layer, key schedule, and swift-certificates chain validation; RFC 9112 request serialization
+  and response framing; outbound connects on the kqueue / epoll backbones; per-origin keep-alive pooling,
+  deadlines, idempotent retry, filtered redirects, and zstd / gzip / deflate decoding. `apple-docs` replaced
+  `URLSessionUpstreamTransport` with `NativeUpstreamTransport` and dropped `FoundationNetworking` from the
+  dependency-audit whitelist. Redirects are not followed by the crawler (every fetched URL passes its SSRF
+  policy; a `3xx` is surfaced as a status).
+- **Verification:** live TLS 1.3 to `developer.apple.com` (RSA) and GitHub (ECDSA) on macOS and Linux; a
+  3-framework DocC sync (1,793 pages) in 9.9 s at 53 MiB max RSS, index-gated re-sync unchanged, `--full`
+  revalidation answering 66 × `304`; Swift Evolution + TSPL sync 637 pages, 0 errors.
+
 ## Next-Stage Upstream Study
 
-- **`g-cqd/HTTP` outbound `HTTPClient` product:** `g-cqd/HTTP` is currently server-focused (`HTTPServer`, `HTTPResponder`, transports, and server middleware). Studying and adding a streaming, redirect-safe, SSRF-hardened `HTTPClient` product to `g-cqd/HTTP` (ETag/conditional GET, bounded response caps, HTTP/2 multiplexing) will let `AppleDocsSources` and `AppleDocsSetup` drop `FoundationNetworking`/`URLSession` completely on Linux.
-- **`Aemi-Studio/aemi` `AemiIO` Zstd codec:** Promoting `ZstdCodec` (one-shot + bounded streaming `ZSTD_DStream` decompression) into `AemiIO` (or a dedicated `AemiCompression` product) would unify both `g-cqd/HTTP`'s outbound zstd encoder and `apple-docs`'s section/archive codecs.
+- **`g-cqd/HTTP` client follow-ups:** HTTP/2 multiplexing (one connection per origin instead of one per
+  in-flight request) and streaming response bodies for large archive downloads.

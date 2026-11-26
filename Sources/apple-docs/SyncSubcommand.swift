@@ -138,7 +138,7 @@ struct SyncSubcommand: AsyncParsableCommand {
             ? HostRateLimiter(primaryRate: rate, primaryBurst: max(1, Int(rate)))
             : nil
         return UpstreamHTTPClient(
-            transport: URLSessionUpstreamTransport(maxConnectionsPerHost: concurrency),
+            transport: NativeUpstreamTransport(maxConnectionsPerHost: concurrency),
             policy: UpstreamHTTPClient.Policy(hostRateLimiter: limiter)
         )
     }

@@ -39,7 +39,7 @@ public final class UpstreamHTTPClient: Sendable {
     private let policy: Policy
 
     public init(
-        transport: any UpstreamHTTPTransport = URLSessionUpstreamTransport(),
+        transport: any UpstreamHTTPTransport = NativeUpstreamTransport(),
         policy: Policy = Policy()
     ) {
         self.transport = transport

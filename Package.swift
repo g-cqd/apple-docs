@@ -30,22 +30,22 @@ let package = Package(
         .library(name: "AppleDocsWeb", targets: ["AppleDocsWeb"])
     ],
     dependencies: [
-        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "1567137e2c810eb489facf29d90a2c623b75d604"),
-        .package(url: "https://github.com/g-cqd/AemiJSON.git", revision: "75deac170071149540c436bdab47a5c6d5520a4a"),
-        .package(url: "https://github.com/g-cqd/AemiSearch.git", revision: "7fb8acb14e93af22211a6bd025d56b72f1496a5d"),
-        .package(url: "https://github.com/g-cqd/AemiHTML.git", revision: "0b817d306a4c48f0818b353acbfd83175289843c"),
+        .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "9f8d1a3eafed0ad23919b9c68d33606632ce0659"),
+        .package(url: "https://github.com/g-cqd/AemiJSON.git", revision: "fb4478051725c95614e76b15ac11e9a5c6a502a3"),
+        .package(url: "https://github.com/g-cqd/AemiSearch.git", revision: "3b20d77581083c6996b28663bae4c0d341cc1b2f"),
+        .package(url: "https://github.com/g-cqd/AemiHTML.git", revision: "1e6b46932f423e8e9ccbb1a7de297005ead746b8"),
         .package(
             url: "https://github.com/g-cqd/AemiMarkdown.git",
-            revision: "2240dc9329db6a6770cc60ecf5b14084282c17df"
+            revision: "7310d84c3e05708940d5954888b26eb24b9e6a82"
         ),
-        .package(url: "https://github.com/g-cqd/AemiRegex.git", revision: "792eebdcdf3a47daf8ba6ae9a1dfd4c6c5833fc4"),
-        .package(url: "https://github.com/g-cqd/AemiHMMML.git", revision: "dd439204570a9969612ea009608ec39e455c6a33"),
+        .package(url: "https://github.com/g-cqd/AemiRegex.git", revision: "1b58215ac7266f8c847065f0cb63ab1cc75b3bc9"),
+        .package(url: "https://github.com/g-cqd/AemiHMMML.git", revision: "2daa7f8c91cd9aada423ae6c62cde19fcf9d6795"),
         .package(
             url: "https://github.com/g-cqd/AemiProtobuf.git",
-            revision: "3da9bdee8af8a7e2c6e1d8bb8a5525160331c473"
+            revision: "d8985c489aa19e285214d032ef98855b6b95f30b"
         ),
-        .package(url: "https://github.com/g-cqd/URLBuilder.git", revision: "8799923de4b269a10a155f2e8d9584d2bd885935"),
-        .package(url: "https://github.com/g-cqd/HTTP.git", revision: "dd39e7ecc2bfb8bf9980632517c8c549e895c34c"),
+        .package(url: "https://github.com/g-cqd/URLBuilder.git", revision: "1c0819f41013f3e09aa87a90b3076d14a2525085"),
+        .package(url: "https://github.com/g-cqd/HTTP.git", revision: "e18e598d3a7288343cbd857b83f6c4c9e0cab541"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.8.2")),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "5.2.0"),
@@ -106,6 +106,7 @@ let package = Package(
                 .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "AemiRegex", package: "AemiRegex"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
+                .product(name: "HTTPClient", package: "HTTP"), .product(name: "HTTPCore", package: "HTTP"),
                 .product(name: "URLBuilder", package: "URLBuilder")
             ],
             path: "Sources/AppleDocsSources",

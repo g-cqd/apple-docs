@@ -23,7 +23,7 @@ struct ConsolidateSubcommand: AsyncParsableCommand {
         let store = try CorpusStore(path: db ?? CorpusPaths.defaultDatabasePath(), options: .readWrite)
         defer { store.close() }
         let client = UpstreamHTTPClient(
-            transport: URLSessionUpstreamTransport(maxConnectionsPerHost: concurrency),
+            transport: NativeUpstreamTransport(maxConnectionsPerHost: concurrency),
             policy: UpstreamHTTPClient.Policy(hostRateLimiter: HostRateLimiter())
         )
         let report = try await CorpusConsolidator.run(
