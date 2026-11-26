@@ -6,6 +6,21 @@ public enum SQLiteValue: Hashable, Sendable {
     case text(String)
     case blob([UInt8])
 
+    /// Encodes an optional `String` as `.text` or `.null`.
+    public static func optionalText(_ value: String?) -> Self {
+        value.map(Self.text) ?? .null
+    }
+
+    /// Encodes an optional `Int64` as `.integer` or `.null`.
+    public static func optionalInteger(_ value: Int64?) -> Self {
+        value.map(Self.integer) ?? .null
+    }
+
+    /// Encodes a `Bool` as SQLite integer `1` or `0`.
+    public static func flag(_ value: Bool) -> Self {
+        .integer(value ? 1 : 0)
+    }
+
     public var integerValue: Int64? {
         if case .integer(let value) = self { return value }
         return nil

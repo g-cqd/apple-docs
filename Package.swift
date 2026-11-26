@@ -74,6 +74,7 @@ let package = Package(
                 .product(name: "AemiIO", package: "aemi")
             ],
             path: "Sources/AppleDocsStorage",
+            resources: [.process("Resources")],
             swiftSettings: strictSettings
         ),
         .target(
