@@ -45,6 +45,10 @@ extension MCPServerDispatcher {
                 return try await invokeSearchSFSymbols(arguments)
             case "list_apple_fonts":
                 return try await invokeListAppleFonts()
+            case "render_sf_symbol":
+                return try invokeRenderSFSymbol(arguments)
+            case "render_font_text":
+                return try await invokeRenderFontText(arguments)
             default:
                 throw JSONRPCError(code: JSONRPCError.methodNotFound, message: "Unknown tool: \(name)")
         }
@@ -137,6 +141,41 @@ extension MCPServerDispatcher {
         try await encodeFromPool { conn in
             try AssetQueryService.listAppleFonts(on: conn)
         }
+    }
+
+    private func invokeRenderSFSymbol(_ args: JSON) throws -> String {
+        let name = try requiredString(args, key: "name", tool: "render_sf_symbol")
+        let scope = args["scope"].string ?? "public"
+        let size = args["size"].int ?? 128
+        let color = args["color"].string ?? "currentColor"
+        let background = args["background"].string ?? "transparent"
+        return try AssetRenderService.renderSFSymbolSVG(
+            name: name,
+            scope: scope,
+            size: size,
+            color: color,
+            background: background,
+            resourcesDirectory: CorpusPaths.defaultResourcesDirectory()
+        )
+    }
+
+    private func invokeRenderFontText(_ args: JSON) async throws -> String {
+        let fontID = try requiredString(args, key: "fontId", tool: "render_font_text")
+        let text = args["text"].string ?? "AaBbCc 0123"
+        let size = Double(args["size"].int ?? 48)
+        let dbPath = reader.databasePath
+        return
+            try await Task.detached {
+                let conn = try SQLiteConnection(path: dbPath, options: .readOnly)
+                defer { conn.close() }
+                return try await AssetRenderService.renderFontTextSVG(
+                    fontID: fontID,
+                    text: text,
+                    size: size,
+                    on: conn
+                )
+            }
+            .value
     }
 
     private func requiredString(_ args: JSON, key: String, tool: String) throws(JSONRPCError) -> String {

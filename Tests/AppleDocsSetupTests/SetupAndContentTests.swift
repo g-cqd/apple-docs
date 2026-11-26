@@ -1,3 +1,4 @@
+import AppleDocsCommands
 import AppleDocsContent
 import AppleDocsCore
 import AppleDocsSetup
@@ -161,5 +162,38 @@ struct SetupAndContentTests {
         #expect(converted.document.title == "App Store Review Guidelines")
         #expect(converted.sections.contains { $0.contentText.contains("Apps should be safe") })
         #expect(!converted.sections.contains { $0.contentText.contains("Prompt injection") })
+    }
+
+    @Test func `renders pre-rendered SF Symbol SVG with safe color/size styling and rejects traversal names`() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("apple-docs-sym-\(UUID().uuidString)")
+        let publicDir = tempDir.appendingPathComponent("symbols/public", isDirectory: true)
+        try FileManager.default.createDirectory(at: publicDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sampleSVG = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 100 100"><path d="M0 0L10 10" fill="#000000"/></svg>
+            """
+        try Data(sampleSVG.utf8).write(to: publicDir.appendingPathComponent("star.fill.svg"))
+
+        let rendered = try AssetRenderService.renderSFSymbolSVG(
+            name: "star.fill",
+            scope: "public",
+            size: 64,
+            color: "#FF3366",
+            background: "#FFFFFF",
+            resourcesDirectory: tempDir.path
+        )
+        #expect(rendered.contains("width=\"64\""))
+        #expect(rendered.contains("fill=\"#FF3366\""))
+        #expect(rendered.contains("<rect width=\"100%\" height=\"100%\" fill=\"#FFFFFF\"/>"))
+
+        #expect(AssetRenderService.sanitizeColor("javascript:alert(1)") == nil)
+        #expect(throws: SetupError.unsafeArchiveMember(path: "../etc/passwd", reason: "invalid SF Symbol identifier")) {
+            _ = try AssetRenderService.renderSFSymbolSVG(
+                name: "../etc/passwd",
+                resourcesDirectory: tempDir.path
+            )
+        }
     }
 }

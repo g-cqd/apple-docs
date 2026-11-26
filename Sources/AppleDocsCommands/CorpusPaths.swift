@@ -19,4 +19,11 @@ public enum CorpusPaths: Sendable {
             .appendingPathComponent("apple-docs-v1.db")
             .path
     }
+
+    /// Default path to the extracted resources directory (`symbols/`, `fonts/`, `models/`).
+    public static func defaultResourcesDirectory(dataDirectory: String = defaultDataDirectory()) -> String {
+        URL(fileURLWithPath: dataDirectory, isDirectory: true)
+            .appendingPathComponent("resources", isDirectory: true)
+            .path
+    }
 }

@@ -229,7 +229,7 @@ let package = Package(
         .testTarget(
             name: "AppleDocsSetupTests",
             dependencies: [
-                "AppleDocsContent", "AppleDocsCore", "AppleDocsSetup",
+                "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsSetup",
                 "AppleDocsSetupDarwin", "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSetupTests",
