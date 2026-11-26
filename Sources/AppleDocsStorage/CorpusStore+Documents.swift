@@ -1,14 +1,13 @@
 public import AppleDocsCore
 
 extension CorpusStore {
-    /// Inserts or updates a document record and returns its stable integer row ID.
+    /// Inserts or updates a document record and returns its stable integer row ID in a single `RETURNING id` round-trip.
     @discardableResult
     public func upsertDocument(_ document: DocumentRecord) throws(SQLiteError) -> Int64 {
-        try connection.execute(Self.upsertDocumentSQL, bindings: Self.encodeDocumentBindings(document))
         guard
             let row = try connection.queryOne(
-                "SELECT id FROM documents WHERE key = ?",
-                bindings: [.text(document.key.rawValue)]
+                "\(Self.upsertDocumentSQL) RETURNING id",
+                bindings: Self.encodeDocumentBindings(document)
             )
         else {
             throw .transactionFailed("Failed to read row ID after upserting \(document.key.rawValue)")
@@ -16,10 +15,12 @@ extension CorpusStore {
         return try row.integer(at: 0)
     }
 
-    /// Replaces all sections for `documentID` and re-indexes its body (Bun's plain-text body) in sync.
+    /// Replaces all sections for `documentID` (compressing bulky cells with Zstandard) and re-indexes its body
+    /// in sync. Pass `document` when already in memory to skip re-SELECTing `title / abstract / declaration / headings`.
     public func replaceSections(
         forDocumentID documentID: Int64,
-        sections: [DocumentSectionRecord]
+        sections: [DocumentSectionRecord],
+        document: DocumentRecord? = nil
     ) throws(SQLiteError) {
         try connection.execute("DELETE FROM document_sections WHERE document_id = ?", bindings: [.integer(documentID)])
         for section in sections {
@@ -33,44 +34,48 @@ extension CorpusStore {
                     .integer(documentID),
                     .text(section.sectionKind),
                     .optionalText(section.heading),
-                    .text(section.contentText),
-                    .optionalText(section.contentJSON),
+                    ZstdCodec.encodeSectionText(section.contentText),
+                    ZstdCodec.encodeOptionalSectionText(section.contentJSON),
                     .integer(Int64(section.sortOrder))
                 ]
             )
         }
-        try indexBody(documentID: documentID, sections: sections)
+        try indexBody(documentID: documentID, sections: sections, document: document)
     }
 
     /// Fetches a document record by its validated canonical ``DocumentKey``.
     public func document(forKey key: DocumentKey) throws(SQLiteError) -> DocumentRecord? {
+        try documentWithID(forKey: key)?.document
+    }
+
+    /// Fetches `(id, document)` in a single `documents` lookup so callers can fetch `document_sections` by `document_id`.
+    public func documentWithID(forKey key: DocumentKey) throws(SQLiteError) -> (id: Int64, document: DocumentRecord)? {
         guard
             let row = try connection.queryOne(
-                "\(Self.documentSelectSQL) WHERE key = ?",
+                "SELECT d.id, \(Self.documentColumnList) FROM documents d WHERE d.key = ?",
                 bindings: [.text(key.rawValue)]
             )
-        else {
-            return nil
-        }
-        return try Self.decodeDocument(row)
+        else { return nil }
+        return (try row.integer(at: 0), try Self.decodeDocument(row, offset: 1))
+    }
+
+    /// Fetches all sections belonging to `documentID`, ordered by `sort_order`.
+    public func sections(forDocumentID documentID: Int64) throws(SQLiteError) -> [DocumentSectionRecord] {
+        let rows = try connection.query(
+            "SELECT section_kind, heading, content_text, content_json, sort_order FROM document_sections WHERE document_id = ? ORDER BY sort_order, id",
+            bindings: [.integer(documentID)]
+        )
+        return try rows.map(Self.decodeSection)
     }
 
     /// Fetches all sections belonging to the document identified by `key`, ordered by `sort_order`.
     public func sections(forKey key: DocumentKey) throws(SQLiteError) -> [DocumentSectionRecord] {
         let rows = try connection.query(
-            """
-            SELECT s.section_kind, s.heading, s.content_text, s.content_json, s.sort_order
-            FROM document_sections s
-            JOIN documents d ON d.id = s.document_id
-            WHERE d.key = ?
-            ORDER BY s.sort_order, s.id
-            """,
+            "SELECT s.section_kind, s.heading, s.content_text, s.content_json, s.sort_order FROM document_sections s JOIN documents d ON d.id = s.document_id WHERE d.key = ? ORDER BY s.sort_order, s.id",
             bindings: [.text(key.rawValue)]
         )
         return try rows.map(Self.decodeSection)
     }
-
-    private static let documentSelectSQL = "SELECT \(documentColumnList) FROM documents d"
 
     private static let upsertDocumentSQL = """
         INSERT INTO documents (

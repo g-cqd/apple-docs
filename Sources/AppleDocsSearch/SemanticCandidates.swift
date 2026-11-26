@@ -1,3 +1,4 @@
+import AppleDocsKernels
 import AppleDocsStorage
 import Foundation
 
@@ -10,6 +11,11 @@ enum SemanticCandidates {
         let score: Double
         /// The winning entry's packed sign bits (for MMR diversity).
         let bits: ArraySlice<UInt8>
+    }
+
+    struct Entry: Hashable, Sendable {
+        let index: Int
+        let distance: Int
     }
 
     static func candidates(
@@ -65,25 +71,14 @@ enum SemanticCandidates {
         return Array(JSArraySort.sorted(candidates) { $1.score - $0.score }.prefix(topK))
     }
 
-    /// `quantizeTo`: bit `i` set when component `i` is `>= 0`.
+    /// `quantizeTo`: bit `i` set when component `i` is `>= 0` (dispatched through `AppleDocsKernels` SIMD).
     static func quantize(_ vector: [Float], dimensions: Int) -> [UInt8] {
-        var out = [UInt8](repeating: 0, count: (dimensions + 7) / 8)
-        for index in 0 ..< min(vector.count, dimensions) where vector[index] >= 0 {
-            out[index >> 3] |= 1 << UInt8(index & 7)
-        }
-        return out
+        AppleDocsKernels.quantizeSignBits(vector, dimensions: dimensions)
     }
 
     /// `dotI8`: `Σ q[i]·i8[i]` in double precision, times the trailing little-endian float32 scale.
     static func dotInt8(_ query: [Float], _ packed: [UInt8], dimensions: Int) -> Double {
-        var dot = 0.0
-        for index in 0 ..< dimensions {
-            dot += Double(query[index]) * Double(Int8(bitPattern: packed[index]))
-        }
-        let scaleBits =
-            UInt32(packed[dimensions]) | UInt32(packed[dimensions + 1]) << 8 | UInt32(packed[dimensions + 2]) << 16
-            | UInt32(packed[dimensions + 3]) << 24
-        return dot * Double(Float(bitPattern: scaleBits))
+        AppleDocsKernels.dotInt8(query: query, packedPayload: packed, dimensions: dimensions)
     }
 
     static func hamming(_ lhs: ArraySlice<UInt8>, _ rhs: ArraySlice<UInt8>) -> Int {

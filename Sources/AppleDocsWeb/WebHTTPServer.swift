@@ -16,6 +16,7 @@ public enum WebHTTPServer: Sendable {
             resourcesDirectory: resourcesDirectory,
             site: site ?? WebSiteConfiguration(baseURL: "http://\(host.contains(":") ? "[\(host)]" : host):\(port)")
         )
+        responder.reader.prewarmSemantic()
         try await PlatformHTTPServer.serve(responder: responder, host: host, port: port, options: options) {
             await responder.close()
         }

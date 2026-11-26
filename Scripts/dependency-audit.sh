@@ -33,4 +33,4 @@ fi
 [ "${1:-}" = install ] && exit 0
 
 cd "$(dirname "$0")/.."
-"$tool" . --no-color --quiet --whitelist SQLite3,zlib,CSQLite
+"$tool" . --no-color --quiet --whitelist SQLite3,zlib,CSQLite,CAppleDocsKernels

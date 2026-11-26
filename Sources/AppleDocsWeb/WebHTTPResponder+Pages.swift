@@ -46,7 +46,10 @@ extension WebHTTPResponder {
             language: query["language"],
             limit: 50
         )
-        let results = try await reader.withConnection { try CorpusQueryService.search(request, on: $0) }
+        let semantic = await reader.semanticResources()
+        let results = try await reader.withConnection {
+            try CorpusQueryService.search(request, semantic: semantic, on: $0)
+        }
         return htmlResponse(WebHTMLRenderer.renderSearchPage(query: text, results: results))
     }
 

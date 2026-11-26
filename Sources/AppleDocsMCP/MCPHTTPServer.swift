@@ -10,6 +10,7 @@ public enum MCPHTTPServer: Sendable {
         allowedOrigins: Set<String> = [],
         options: PlatformHTTPServer.Options = PlatformHTTPServer.Options()
     ) async throws {
+        dispatcher.prewarm()
         let responder = MCPHTTPResponder(dispatcher: dispatcher, allowedOrigins: allowedOrigins)
         try await PlatformHTTPServer.serve(responder: responder, host: host, port: port, options: options) {
             await dispatcher.close()

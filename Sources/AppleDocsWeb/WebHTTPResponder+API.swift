@@ -20,8 +20,9 @@ extension WebHTTPResponder {
                         language: query["language"],
                         limit: query["limit"].flatMap(Int.init) ?? 25
                     )
+                    let semantic = await reader.semanticResources()
                     let hits = try await reader.withConnection { conn in
-                        try CorpusQueryService.search(req, on: conn)
+                        try CorpusQueryService.search(req, semantic: semantic, on: conn)
                     }
                     return .json(Array(try PublicProjection.encodeJSON(hits).utf8), status: .ok)
 

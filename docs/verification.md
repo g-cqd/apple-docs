@@ -64,8 +64,19 @@ Run one with `Fuzz/run.sh <Harness> [seconds]`, all with `Fuzz/ci.sh` (nightly i
   Cold latency is dominated by OS page-cache residency of each database file, so give Bun a fresh copy of its
   database (`mcp start --home DIR`) made alongside the Swift one. Measured that way over the full corpus (cold,
   distinct pages, MCP cache off): `read_doc` p50 8.8 ms (Swift) vs 9.4 ms (Bun), p99 42.6 vs 43.4 ms; paginated
-  p50 7.4 vs 7.1 ms, p99 28.4 vs 34.1 ms; RSS 99 vs 182 MiB. Warm, both serve a page in ~0.14 ms. `search_docs`
-  (semantic tier on, 200 random titles): p50 46 vs 45 ms, p90 112 vs 131 ms, p99 416 vs 375 ms, RSS 609 vs 612 MiB.
+  p50 7.4 vs 7.1 ms, p99 28.4 vs 34.1 ms; RSS 99 vs 182 MiB. Warm, both serve a page in ~0.14 ms.
+- `CAppleDocsKernels` + `AppleDocsKernels` (`AppleDocsKernelsProbe --bench`): runtime-dispatched NEON / AVX2+FMA /
+  SSE4.2 / SSE2 / scalar SIMD kernels verified on macOS arm64, Linux arm64 (`gcqd-dev`), and Intel x86_64 (`mm18.local`):
+  - Batched 512-bit Hamming (`100k × 64 B`): **0.09 ms** NEON, **0.34 ms** AVX2 (`vpshufb` nibble LUT, 3.4× scalar)
+  - Int8 rescoring dot product (`512 d`): **87 ns** NEON (4.2×), **84 ns** AVX2+FMA (6.2×)
+  - Compact `M2VQ8` row gather + mean-pool + L2-normalize: bit-identical across scalar/SSE2/AVX2/NEON without
+    expanding the 31 MiB int8 table to 124 MiB `Float`
+  - Myers 64-bit bit-parallel UTF-16 Levenshtein: **68–91 ns** (5–15× over DP)
+  - With single-pass tiled Hamming shortlist + compact Q8 + exact-token FTS5 stopword matching + background semantic
+    prewarm, uncached `search_docs` over the 393k-doc / 983k-chunk corpus beats Bun across every query class:
+    `NavigationStack` **12.6 ms vs 30.0 ms**, `"button style"` (SwiftUI) **8.7 ms vs 25.7 ms**,
+    `"how to compress data with lzfse"` **63.6 ms vs 147.4 ms**, `"NavigatonStak"` (typo) **20.4 ms vs 52.7 ms**,
+    `"performing calculations on a gpu"` **34.8 ms vs 759.9 ms**, RSS **378 MiB vs 719 MiB**.
 
 ## Release path
 

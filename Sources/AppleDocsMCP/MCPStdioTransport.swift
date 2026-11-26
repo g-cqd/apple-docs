@@ -16,6 +16,7 @@ public enum MCPStdioTransport: Sendable {
         input: FileHandle? = nil,
         output: FileHandle? = nil
     ) async throws {
+        dispatcher.prewarm()
         let reader = input ?? .standardInput
         let writer = output ?? .standardOutput
         var framing = LineFraming(maximumLineLength: maxLineBytes)

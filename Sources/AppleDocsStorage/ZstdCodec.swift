@@ -13,6 +13,27 @@ public enum ZstdCodec: Sendable {
     /// Maximum output size accepted during decompression (16 MiB default — Threat Model T-04).
     public static let defaultMaxDecodedBytes = 16_777_216
 
+    ///Minimum UTF-8 byte length before trying Zstandard section compression (matches Bun `section-codec.js` intent).
+    public static let minCompressBytes = 96
+
+    /// Compresses `text` with Zstandard (level 3, pooled `HTTPZstd` context) when the frame is smaller than
+    /// the raw UTF-8 bytes; otherwise returns `.text(text)` untouched.
+    public static func encodeSectionText(_ text: String) -> SQLiteValue {
+        let utf8Count = text.utf8.count
+        guard utf8Count >= minCompressBytes else { return .text(text) }
+        let raw = Array(text.utf8)
+        if let compressed = try? Zstd.compress(raw), compressed.count < raw.count {
+            return .blob(compressed)
+        }
+        return .text(text)
+    }
+
+    /// Optional variant of ``encodeSectionText(_:)`` for nullable `content_json` columns.
+    public static func encodeOptionalSectionText(_ text: String?) -> SQLiteValue {
+        guard let text else { return .null }
+        return encodeSectionText(text)
+    }
+
     /// Returns `true` when `bytes` starts with the standard Zstandard frame magic (`0x28 0xB5 0x2F 0xFD`).
     public static func isZstdFrame(_ bytes: [UInt8]) -> Bool {
         Zstd.isFrame(bytes)

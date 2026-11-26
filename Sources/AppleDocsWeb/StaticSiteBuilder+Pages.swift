@@ -12,6 +12,7 @@ extension StaticSiteBuilder {
         concurrency: Int
     ) async throws -> (exported: [String], failures: Int) {
         let workers = max(1, min(concurrency, keys.count))
+        let rootsBySlug = Dictionary(roots.map { ($0.slug, $0) }, uniquingKeysWith: { _, latest in latest })
         return try await withThrowingTaskGroup(of: (exported: [String], failures: Int).self) { group in
             for worker in 0 ..< workers {
                 group.addTask {
@@ -19,7 +20,7 @@ extension StaticSiteBuilder {
                         keys,
                         worker: worker,
                         stride: workers,
-                        roots: roots,
+                        rootsBySlug: rootsBySlug,
                         databasePath: databasePath,
                         output: output
                     )
@@ -40,7 +41,7 @@ extension StaticSiteBuilder {
         _ keys: [String],
         worker: Int,
         stride step: Int,
-        roots: [CorpusRootRecord],
+        rootsBySlug: [String: CorpusRootRecord],
         databasePath: String,
         output: StaticSiteOutput
     ) throws -> (exported: [String], failures: Int) {
@@ -49,12 +50,26 @@ extension StaticSiteBuilder {
             throw BuildError.database("\(error)")
         }
         defer { store.close() }
+        var rootTitlesBySlug: [String: String] = [:]
         var exported: [String] = []
         var failures = 0
         for index in Swift.stride(from: worker, to: keys.count, by: step) {
             do {
                 let key = try DocumentKey(keys[index])
-                guard let view = try WebDocumentView.load(key: key, store: store, roots: roots) else {
+                let slug = key.rootSlug
+                if rootsBySlug[slug]?.displayName == slug, rootTitlesBySlug[slug] == nil,
+                    let rootKey = try? DocumentKey(slug)
+                {
+                    rootTitlesBySlug[slug] = (try? store.document(forKey: rootKey))?.title ?? slug
+                }
+                guard
+                    let view = try WebDocumentView.load(
+                        key: key,
+                        store: store,
+                        rootsBySlug: rootsBySlug,
+                        rootTitlesBySlug: rootTitlesBySlug
+                    )
+                else {
                     failures += 1
                     continue
                 }

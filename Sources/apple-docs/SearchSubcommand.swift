@@ -51,8 +51,19 @@ struct SearchSubcommand: ParsableCommand {
             limit: limit
         )
         try common.runQuery(
-            { try CorpusQueryService.search(request, on: $0.connection) },
+            { store in
+                let semantic = Self.loadSemanticIfAvailable(on: store.connection)
+                return try CorpusQueryService.search(request, semantic: semantic, on: store.connection)
+            },
             formatText: PublicTextFormatter.formatSearchResults
         )
+    }
+
+    private static func loadSemanticIfAvailable(on connection: SQLiteConnection) -> CorpusSearch.Semantic? {
+        let modelDir = CorpusPaths.defaultModelDirectory()
+        guard let embedder = try? Model2VecEmbedder(modelDirectory: modelDir),
+            let store = (try? ChunkVectorStore.load(from: connection)) ?? nil
+        else { return nil }
+        return CorpusSearch.Semantic(embed: { embedder.embed($0) }, store: store)
     }
 }

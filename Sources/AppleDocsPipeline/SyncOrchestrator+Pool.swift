@@ -12,10 +12,20 @@ extension SyncOrchestrator {
             do {
                 try releaseClaims(context: context)
                 try fill(&group, state: &state, context: context)
+                var batch: [FetchedEntry] = []
+                batch.reserveCapacity(32)
                 while let entry = await group.next() {
                     state.inFlight.remove(entry.path)
-                    try commitBatch([entry], context: context, counters: &state.counters)
+                    batch.append(entry)
+                    let flushCap = max(4, min(32, context.options.concurrency / 2))
+                    if batch.count >= flushCap || state.inFlight.isEmpty {
+                        try commitBatch(batch, context: context, counters: &state.counters)
+                        batch.removeAll(keepingCapacity: true)
+                    }
                     try fill(&group, state: &state, context: context)
+                }
+                if !batch.isEmpty {
+                    try commitBatch(batch, context: context, counters: &state.counters)
                 }
                 return .success(state.counters)
             } catch {

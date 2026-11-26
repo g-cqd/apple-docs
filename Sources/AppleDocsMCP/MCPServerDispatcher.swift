@@ -40,6 +40,11 @@ public final class MCPServerDispatcher: Sendable {
             : MCPToolCache(stamp: { stamp.current() }, now: { CorpusStamp.monotonicMilliseconds() })
     }
 
+    /// Starts background warmup of the semantic index (`Model2VecEmbedder` + `ChunkVectorStore`).
+    public func prewarm() {
+        reader.prewarmSemantic()
+    }
+
     /// Closes pooled SQLite readers and clears caches cleanly on shutdown.
     public func close() async {
         await markdownCache.removeAll()

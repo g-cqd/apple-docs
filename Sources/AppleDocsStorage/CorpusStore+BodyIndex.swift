@@ -3,23 +3,38 @@ import AppleDocsCore
 /// The full-text body index (`documents_body_fts`), kept identical to Bun's: one contentless row per document whose
 /// text is ``DocumentPlainText`` of the document fields and all its sections.
 extension CorpusStore {
-    /// Re-indexes one document's body from its stored fields and `sections`.
-    func indexBody(documentID: Int64, sections: [DocumentSectionRecord]) throws(SQLiteError) {
+    /// Re-indexes one document's body from its in-memory `document` (when supplied) or stored fields + `sections`.
+    func indexBody(
+        documentID: Int64,
+        sections: [DocumentSectionRecord],
+        document: DocumentRecord? = nil
+    ) throws(SQLiteError) {
         try connection.execute("DELETE FROM documents_body_fts WHERE rowid = ?", bindings: [.integer(documentID)])
-        guard
-            let row = try connection.queryOne(
-                "SELECT title, abstract_text, declaration_text, headings FROM documents WHERE id = ?",
-                bindings: [.integer(documentID)]
+        let body: String
+        if let document {
+            body = DocumentPlainText.render(
+                title: document.title,
+                abstract: document.abstractText,
+                declaration: document.declarationText,
+                headings: document.headings,
+                sections: sections
             )
-        else { return }
-        // @dl:accept -- column-to-argument mapping (same shape as the font-file decoder)
-        let body = DocumentPlainText.render(
-            title: try row.optionalText(at: 0),
-            abstract: try row.optionalText(at: 1),
-            declaration: try row.optionalText(at: 2),
-            headings: try row.optionalText(at: 3),
-            sections: sections
-        )
+        } else {
+            guard
+                let row = try connection.queryOne(
+                    "SELECT title, abstract_text, declaration_text, headings FROM documents WHERE id = ?",
+                    bindings: [.integer(documentID)]
+                )
+            else { return }
+            // @dl:accept -- column-to-argument mapping (same shape as the font-file decoder)
+            body = DocumentPlainText.render(
+                title: try row.optionalText(at: 0),
+                abstract: try row.optionalText(at: 1),
+                declaration: try row.optionalText(at: 2),
+                headings: try row.optionalText(at: 3),
+                sections: sections
+            )
+        }
         guard !body.isEmpty else { return }
         try connection.execute(
             "INSERT INTO documents_body_fts (rowid, body) VALUES (?, ?)",

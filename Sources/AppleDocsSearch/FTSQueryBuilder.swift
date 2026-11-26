@@ -42,12 +42,24 @@ public enum FTSQueryBuilder: Sendable {
         ASCIIWords.runs(query).contains { $0.word == "AND" || $0.word == "OR" || $0.word == "NOT" }
     }
 
+    /// Short pure-ASCII English stopwords whose FTS5 prefix form (`"a"*`, `"on"*`) scans every matching
+    /// dictionary term across 393k document bodies (hundreds of milliseconds); matched as exact tokens instead.
+    private static let exactOnlyStopwords: Set<String> = [
+        "a", "an", "as", "at", "be", "by", "do", "if", "in", "is", "it", "no", "of", "on", "or", "so", "to", "up", "we"
+    ]
+
     /// `buildWordGroup(word)`.
     private static func wordGroup(_ word: String) -> String? {
         let separators: Set<Unicode.Scalar> = [".", "_", ":", "/", "\\"]
         let segments = word.unicodeScalars.split(whereSeparator: separators.contains)
             .map { String(String.UnicodeScalarView($0)) }
         guard !segments.isEmpty else { return nil }
+        if segments.count == 1 {
+            let single = segments[0].lowercased()
+            if exactOnlyStopwords.contains(single) {
+                return "\"\(single)\""
+            }
+        }
         var prefixTerms: [String] = []
         var exactTerms: [String] = []
         for segment in segments {

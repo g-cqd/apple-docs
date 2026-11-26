@@ -1,4 +1,5 @@
 import AppleDocsCore
+import AppleDocsKernels
 import AppleDocsStorage
 
 /// Bun's typo-tolerant title tier (`lib/fuzzy.js` `fuzzyMatchTitles`): trigram candidates from `documents_trigram`
@@ -72,25 +73,8 @@ enum FuzzyTitleMatcher {
         )
     }
 
-    /// Levenshtein distance with early exit once every cell of a row exceeds `maxDistance`.
+    /// Myers 64-bit bit-parallel bounded Levenshtein over UTF-16 code units (falling back to banded DP > 64).
     static func levenshtein(_ lhs: [UInt16], _ rhs: [UInt16], maxDistance: Int) -> Int {
-        if abs(lhs.count - rhs.count) > maxDistance { return maxDistance + 1 }
-        if lhs.isEmpty { return rhs.count }
-        if rhs.isEmpty { return lhs.count }
-        var previous = Array(0 ... rhs.count)
-        var current = [Int](repeating: 0, count: rhs.count + 1)
-        for row in 1 ... lhs.count {
-            current[0] = row
-            var rowMinimum = row
-            for column in 1 ... rhs.count {
-                current[column] =
-                    lhs[row - 1] == rhs[column - 1]
-                    ? previous[column - 1] : 1 + min(previous[column], current[column - 1], previous[column - 1])
-                rowMinimum = min(rowMinimum, current[column])
-            }
-            if rowMinimum > maxDistance { return maxDistance + 1 }
-            swap(&previous, &current)
-        }
-        return previous[rhs.count]
+        AppleDocsKernels.levenshteinUTF16(lhs, rhs, maxDistance: maxDistance)
     }
 }

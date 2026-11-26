@@ -17,7 +17,9 @@ let package = Package(
     platforms: [.macOS("15.6")],
     products: [
         .executable(name: "apple-docs", targets: ["apple-docs"]),
+        .executable(name: "AppleDocsKernelsProbe", targets: ["AppleDocsKernelsProbe"]),
         .library(name: "AppleDocsCore", targets: ["AppleDocsCore"]),
+        .library(name: "AppleDocsKernels", targets: ["AppleDocsKernels"]),
         .library(name: "AppleDocsStorage", targets: ["AppleDocsStorage"]),
         .library(name: "AppleDocsSearch", targets: ["AppleDocsSearch"]),
         .library(name: "AppleDocsContent", targets: ["AppleDocsContent"]),
@@ -55,6 +57,24 @@ let package = Package(
     targets: [
         .systemLibrary(name: "CSQLite", path: "Sources/CSQLite", providers: [.apt(["libsqlite3-dev"])]),
         .target(
+            name: "CAppleDocsKernels",
+            path: "Sources/CAppleDocsKernels",
+            publicHeadersPath: "include",
+            cSettings: [.unsafeFlags(["-O3"])]
+        ),
+        .target(
+            name: "AppleDocsKernels",
+            dependencies: ["CAppleDocsKernels"],
+            path: "Sources/AppleDocsKernels",
+            swiftSettings: strictSettings
+        ),
+        .executableTarget(
+            name: "AppleDocsKernelsProbe",
+            dependencies: ["AppleDocsKernels"],
+            path: "Sources/AppleDocsKernelsProbe",
+            swiftSettings: strictSettings
+        ),
+        .target(
             name: "AppleDocsCore",
             dependencies: [],
             path: "Sources/AppleDocsCore",
@@ -82,7 +102,8 @@ let package = Package(
         .target(
             name: "AppleDocsSearch",
             dependencies: [
-                "AppleDocsCore", "AppleDocsStorage", .product(name: "AemiSearch", package: "AemiSearch"),
+                "AppleDocsCore", "AppleDocsKernels", "AppleDocsStorage",
+                .product(name: "AemiSearch", package: "AemiSearch"),
                 .product(name: "AemiProtobuf", package: "AemiProtobuf"),
                 .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "OrderedCollections", package: "swift-collections")
@@ -169,6 +190,7 @@ let package = Package(
             dependencies: [
                 "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsOutput",
                 "AppleDocsSearch", "AppleDocsStorage",
+                .product(name: "AemiKernel", package: "aemi"),
                 .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSONCore", package: "AemiJSON"),
                 .product(name: "Crypto", package: "swift-crypto"),
                 .product(name: "OrderedCollections", package: "swift-collections")
@@ -256,6 +278,12 @@ let package = Package(
             ],
             path: "Tests/AppleDocsContentTests",
             resources: [.copy("Fixtures")],
+            swiftSettings: strictSettings
+        ),
+        .testTarget(
+            name: "AppleDocsKernelsTests",
+            dependencies: ["AppleDocsKernels"],
+            path: "Tests/AppleDocsKernelsTests",
             swiftSettings: strictSettings
         ),
         .testTarget(

@@ -1,76 +1,65 @@
-/// Bun's `shortlistByHamming`: a bounded max-heap keyed by (distance, index) keeping the `size` nearest entries,
-/// returned ascending by distance then index — ported operation for operation so ties resolve identically.
-extension SemanticCandidates {
-    struct Entry {
-        let index: Int
-        let distance: Int
-    }
+import AppleDocsKernels
 
-    static func shortlist(_ query: [UInt8], store: ChunkVectorStore, size: Int) -> [Entry] {
-        var heapDistance = [Int](repeating: 0, count: size)
-        var heapIndex = [Int](repeating: 0, count: size)
-        var count = 0
+/// Single-pass SIMD Hamming shortlist over ``ChunkVectorStore``: tile-wise `adk_hamming_batch` (NEON `vcntq_u8` /
+/// AVX2 `vpshufb` / SSE4.2 `popcntq`) into a tiny L1-resident tile buffer (`4,096 × UInt16` = 8 KiB) + monotonic
+/// bucket cutoff, avoiding the 3.9 MiB `[UInt16]` heap allocation + `_platform_bzero` + second 983k-row pass while
+/// preserving exact `(distance, index)` tie-breaking.
+extension SemanticCandidates {
+    private static let tileRows = 4_096
+
+    /// Top `size` entries of `store` by Hamming distance to `queryBits`, ties broken by ascending `index`.
+    static func shortlist(_ queryBits: [UInt8], store: ChunkVectorStore, size: Int) -> [Entry] {
+        guard size > 0, store.count > 0, queryBits.count >= store.byteWidth else { return [] }
         let width = store.byteWidth
-        store.packed.withUnsafeBufferPointer { packed in
-            for item in 0 ..< store.count {
-                var distance = 0
-                let base = item * width
-                for byte in 0 ..< width { distance += (query[byte] ^ packed[base + byte]).nonzeroBitCount }
-                if count < size {
-                    var child = count
-                    count += 1
-                    while child > 0 {
-                        let parent = (child - 1) >> 1
-                        if heapDistance[parent] > distance
-                            || (heapDistance[parent] == distance && heapIndex[parent] > item)
-                        {
-                            break
+        let maxBits = width * 8
+        var counts = [Int](repeating: 0, count: maxBits + 1)
+        var buckets = [[Int]](repeating: [], count: maxBits + 1)
+        var cutoff = maxBits
+        var withinCutoff = 0
+        var tile = [UInt16](repeating: 0, count: min(tileRows, store.count))
+
+        queryBits.withUnsafeBufferPointer { qBuf in
+            store.packed.withUnsafeBufferPointer { pBuf in
+                tile.withUnsafeMutableBufferPointer { tBuf in
+                    guard let qBase = qBuf.baseAddress,
+                        let pBase = pBuf.baseAddress,
+                        let tBase = tBuf.baseAddress
+                    else { return }
+                    var cursor = 0
+                    while cursor < store.count {
+                        let count = min(tileRows, store.count - cursor)
+                        unsafe AppleDocsKernels.hammingBatch(
+                            query: qBase,
+                            packed: pBase + cursor * width,
+                            rowCount: count,
+                            byteWidth: width,
+                            into: tBase
+                        )
+                        for offset in 0 ..< count {
+                            let dist = Int(unsafe tBase[offset])
+                            guard dist <= cutoff else { continue }
+                            counts[dist] += 1
+                            buckets[dist].append(cursor + offset)
+                            withinCutoff += 1
+                            while cutoff > 0, withinCutoff - counts[cutoff] >= size {
+                                withinCutoff -= counts[cutoff]
+                                buckets[cutoff].removeAll(keepingCapacity: false)
+                                cutoff -= 1
+                            }
                         }
-                        heapDistance[child] = heapDistance[parent]
-                        heapIndex[child] = heapIndex[parent]
-                        child = parent
+                        cursor += count
                     }
-                    heapDistance[child] = distance
-                    heapIndex[child] = item
-                } else if distance < heapDistance[0] {
-                    siftDown(distance, item, size: size, distances: &heapDistance, indices: &heapIndex)
                 }
             }
         }
-        let entries = (0 ..< count).map { Entry(index: heapIndex[$0], distance: heapDistance[$0]) }
-        return JSArraySort.sorted(entries) { lhs, rhs in
-            let byDistance = lhs.distance - rhs.distance
-            return Double(byDistance != 0 ? byDistance : lhs.index - rhs.index)
-        }
-    }
-
-    private static func siftDown(_ distance: Int, _ item: Int, size: Int, distances: inout [Int], indices: inout [Int])
-    {
-        var node = 0
-        while true {
-            let left = 2 * node + 1
-            let right = left + 1
-            var bigDistance = distance
-            var bigIndex = item
-            var big = -1
-            if left < size,
-                distances[left] > bigDistance || (distances[left] == bigDistance && indices[left] > bigIndex)
-            {
-                big = left
-                bigDistance = distances[left]
-                bigIndex = indices[left]
+        var out: [Entry] = []
+        out.reserveCapacity(size)
+        for d in 0 ... cutoff {
+            for idx in buckets[d] {
+                out.append(Entry(index: idx, distance: d))
+                if out.count == size { return out }
             }
-            if right < size,
-                distances[right] > bigDistance || (distances[right] == bigDistance && indices[right] > bigIndex)
-            {
-                big = right
-            }
-            if big == -1 { break }
-            distances[node] = distances[big]
-            indices[node] = indices[big]
-            node = big
         }
-        distances[node] = distance
-        indices[node] = item
+        return out
     }
 }

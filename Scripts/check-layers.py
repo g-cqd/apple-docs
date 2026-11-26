@@ -15,10 +15,12 @@ import sys
 
 ALLOWED = {
     "CSQLite": set(),
+    "CAppleDocsKernels": set(),
+    "AppleDocsKernels": {"CAppleDocsKernels"},
     "AppleDocsCore": set(),
     "AppleDocsStorage": {"AppleDocsCore", "CSQLite"},
     "AppleDocsContent": {"AppleDocsCore"},
-    "AppleDocsSearch": {"AppleDocsCore", "AppleDocsStorage"},
+    "AppleDocsSearch": {"AppleDocsCore", "AppleDocsKernels", "AppleDocsStorage"},
     "AppleDocsOutput": {"AppleDocsCore"},
     "AppleDocsSources": {"AppleDocsCore", "AppleDocsContent"},
     "AppleDocsPipeline": {

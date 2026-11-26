@@ -57,10 +57,12 @@ public enum SyncPipeline: Sendable {
     static func persist(_ payload: SourcePayload, into store: CorpusStore) throws -> ConvertedDocument {
         let converted = try convert(payload)
         let docID = try store.upsertDocument(converted.document)
-        try store.replaceSections(forDocumentID: docID, sections: converted.sections)
-        for relationship in converted.relationships {
-            try store.upsertRelationship(relationship)
-        }
+        try store.replaceSections(
+            forDocumentID: docID,
+            sections: converted.sections,
+            document: converted.document
+        )
+        try store.replaceRelationships(from: converted.document.key, relationships: converted.relationships)
         return converted
     }
 

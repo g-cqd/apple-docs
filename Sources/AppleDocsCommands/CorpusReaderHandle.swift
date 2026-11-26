@@ -49,8 +49,17 @@ public final class CorpusReaderHandle: Sendable {
         await semanticLoader.loadIfAvailable()
     }
 
-    /// Closes all pooled SQLite reader connections.
+    /// Starts loading the semantic tier (`Model2VecEmbedder` + `ChunkVectorStore`) asynchronously so the
+    /// first `search_docs` / `/search` request finds it warm. Cancelled automatically on ``close()``.
+    public func prewarmSemantic() {
+        Task { [semanticLoader] in
+            await semanticLoader.startWarmup()
+        }
+    }
+
+    /// Closes all pooled SQLite reader connections and cancels any in-flight background warmup.
     public func close() async {
+        await semanticLoader.shutdown()
         await pool.close()
     }
 }
@@ -58,21 +67,45 @@ public final class CorpusReaderHandle: Sendable {
 private actor SemanticStateActor {
     private let databasePath: String
     private let resourcesDirectory: String
-    private var attempted = false
-    private var loaded: CorpusSearch.Semantic?
+    private var warmupTask: Task<CorpusSearch.Semantic?, Never>?
+    private var closed = false
 
     init(databasePath: String, resourcesDirectory: String) {
         self.databasePath = databasePath
         self.resourcesDirectory = resourcesDirectory
     }
 
-    func loadIfAvailable() -> CorpusSearch.Semantic? {
-        if attempted { return loaded }
-        attempted = true
+    func startWarmup() {
+        guard !closed, warmupTask == nil else { return }
+        let dbPath = databasePath
+        let resDir = resourcesDirectory
+        warmupTask = Task.detached(priority: .utility) {
+            Self.loadSemanticSync(databasePath: dbPath, resourcesDirectory: resDir)
+        }
+    }
+
+    func loadIfAvailable() async -> CorpusSearch.Semantic? {
+        guard !closed else { return nil }
+        startWarmup()
+        return await warmupTask?.value
+    }
+
+    func shutdown() {
+        closed = true
+        warmupTask?.cancel()
+        warmupTask = nil
+    }
+
+    private static func loadSemanticSync(
+        databasePath: String,
+        resourcesDirectory: String
+    ) -> CorpusSearch.Semantic? {
+        if Task.isCancelled { return nil }
         if ProcessInfo.processInfo.environment["APPLE_DOCS_SEMANTIC"] == "off" { return nil }
         let modelDir = CorpusPaths.defaultModelDirectory(resourcesDirectory: resourcesDirectory)
         guard FileManager.default.fileExists(atPath: modelDir),
-            let embedder = try? Model2VecEmbedder(modelDirectory: modelDir)
+            let embedder = try? Model2VecEmbedder(modelDirectory: modelDir),
+            !Task.isCancelled
         else {
             return nil
         }
@@ -80,8 +113,7 @@ private actor SemanticStateActor {
             return nil
         }
         defer { conn.close() }
-        guard let store = (try? ChunkVectorStore.load(from: conn)) ?? nil else { return nil }
-        loaded = CorpusSearch.Semantic(embed: { embedder.embed($0) }, store: store)
-        return loaded
+        guard !Task.isCancelled, let store = (try? ChunkVectorStore.load(from: conn)) ?? nil else { return nil }
+        return CorpusSearch.Semantic(embed: { embedder.embed($0) }, store: store)
     }
 }

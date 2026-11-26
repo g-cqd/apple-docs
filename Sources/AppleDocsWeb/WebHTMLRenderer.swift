@@ -1,24 +1,15 @@
+import AemiKernel
+
 /// Escaped, zero-dependency server-side HTML renderer for `apple-docs web serve` and static site export.
 ///
 /// Every dynamic text interpolation is escaped (`&`, `<`, `>`, `"`, `'`) before emission, and pages carry
 /// no inline script or style: the shared layout links `/assets/style.css` and `/assets/app.js`, so the
 /// strict `default-src 'self'` Content-Security-Policy holds.
 public enum WebHTMLRenderer: Sendable {
-    /// Escapes untrusted text for safe insertion into HTML element content or double-quoted attributes.
+    /// Escapes untrusted text for safe insertion into HTML/XML element content or double-quoted attributes
+    /// via `aemi`'s SIMD-backed `XMLEscape` (`AemiKernels.firstIndexOfAny`).
     public static func escapeHTML(_ raw: String) -> String {
-        var out = ""
-        out.reserveCapacity(raw.utf8.count)
-        for scalar in raw.unicodeScalars {
-            switch scalar {
-                case "&": out.append("&amp;")
-                case "<": out.append("&lt;")
-                case ">": out.append("&gt;")
-                case "\"": out.append("&quot;")
-                case "'": out.append("&#39;")
-                default: out.unicodeScalars.append(scalar)
-            }
-        }
-        return out
+        XMLEscape.escaped(raw)
     }
 
     /// The styled "Page not found" page served with `404`.

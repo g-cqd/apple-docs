@@ -18,33 +18,39 @@ public struct WebDocumentView: Sendable {
     public let frameworkName: String
 
     /// Loads the view for `key`.
-    ///
-    /// - Parameters:
-    ///   - key: the page's document key.
-    ///   - store: the corpus to read.
-    ///   - roots: the corpus roots when the caller already has them (static export), else read here.
-    /// - Returns: the view, or `nil` when neither a document nor a framework root lives at `key`.
-    /// - Throws: ``SQLiteError`` when a corpus query fails.
     public static func load(
         key: DocumentKey,
         store: CorpusStore,
-        roots: [CorpusRootRecord]? = nil
+        roots: [CorpusRootRecord]? = nil,
+        rootsBySlug: [String: CorpusRootRecord]? = nil,
+        rootTitlesBySlug: [String: String]? = nil
     ) throws(SQLiteError) -> WebDocumentView? {
         let slug = key.rootSlug
-        let document = try store.document(forKey: key)
-        let allRoots: [CorpusRootRecord]
-        if let roots { allRoots = roots } else { allRoots = try store.listRoots() }
-        let framework = allRoots.first { $0.slug == slug }.map(PublicFrameworkSummary.init)
+        let found = try store.documentWithID(forKey: key)
+        let document = found?.document
+        let rootRecord: CorpusRootRecord?
+        if let rootsBySlug {
+            rootRecord = rootsBySlug[slug]
+        } else if let roots {
+            rootRecord = roots.first { $0.slug == slug }
+        } else {
+            rootRecord = try store.listRoots().first { $0.slug == slug }
+        }
+        let framework = rootRecord.map(PublicFrameworkSummary.init)
         guard document != nil || (framework != nil && key.rawValue == slug) else { return nil }
-        let records = document == nil ? [] : try store.sections(forKey: key)
+        let records = try found.map { item throws(SQLiteError) in try store.sections(forDocumentID: item.id) } ?? []
         let related =
             document == nil ? [] : try CorpusQueryService.relatedDocuments(forKey: key, on: store.connection)
         let linked = Set(related.map(\.path))
         let children = try CorpusQueryService.childDocuments(of: key, on: store.connection)
         var frameworkName = framework?.displayName ?? slug
-        if frameworkName == slug, let rootKey = try? DocumentKey(slug) {
-            let rootDocument = rootKey == key ? document : try store.document(forKey: rootKey)
-            frameworkName = rootDocument?.title ?? slug
+        if frameworkName == slug {
+            if let cachedTitle = rootTitlesBySlug?[slug] {
+                frameworkName = cachedTitle
+            } else if let rootKey = try? DocumentKey(slug) {
+                let rootDocument = rootKey == key ? document : try store.document(forKey: rootKey)
+                frameworkName = rootDocument?.title ?? slug
+            }
         }
         return WebDocumentView(
             key: key,

@@ -128,6 +128,20 @@ public final class CorpusStore {
         )
     }
 
+    /// Replaces all outgoing relationships from `sourceKey` (matching Bun's `replaceRelationships`).
+    public func replaceRelationships(
+        from sourceKey: DocumentKey,
+        relationships: [DocumentRelationshipRecord]
+    ) throws(SQLiteError) {
+        try connection.execute(
+            "DELETE FROM document_relationships WHERE from_key = ?",
+            bindings: [.text(sourceKey.rawValue)]
+        )
+        for relationship in relationships {
+            try upsertRelationship(relationship)
+        }
+    }
+
     /// Returns outgoing relationships from `key`, ordered by `sort_order`.
     public func outgoingRelationships(from key: DocumentKey) throws(SQLiteError) -> [DocumentRelationshipRecord] {
         let rows = try connection.query(
