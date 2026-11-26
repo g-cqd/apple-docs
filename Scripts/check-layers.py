@@ -15,9 +15,8 @@ import sys
 
 ALLOWED = {
     "CSQLite": set(),
-    "CAppleDocsZstd": set(),
     "AppleDocsCore": set(),
-    "AppleDocsStorage": {"AppleDocsCore", "CSQLite", "CAppleDocsZstd"},
+    "AppleDocsStorage": {"AppleDocsCore", "CSQLite"},
     "AppleDocsContent": {"AppleDocsCore"},
     "AppleDocsSearch": {"AppleDocsCore", "AppleDocsStorage"},
     "AppleDocsOutput": {"AppleDocsCore"},

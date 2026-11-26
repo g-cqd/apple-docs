@@ -13,7 +13,7 @@ Audit of `g-cqd/HTTP` (`974a50a`) revealed that several capabilities we initiall
 
 - `TransportBackbone.recommended` (`.posixKqueue` on Darwin, `.posixEpoll` on Linux) — adopted in `PlatformHTTPServer`.
 - `SecurityHeadersMiddleware`, `RequestIDMiddleware`, `RateLimitMiddleware`, `BodyLimitMiddleware`, and `CORSMiddleware` — adopted in `PlatformHTTPServer`.
-- Note on `Zstd`: `g-cqd/HTTP` ships an opt-in `Zstd` trait targeting `CZstd` (one-shot encoder only), so `apple-docs` names its system C module `CAppleDocsZstd` (avoiding module-name collisions) and adds streaming bounded decompression (`ZstdCodec`).
+- Note on `Zstd`: `g-cqd/HTTP` vendors libzstd 1.5.7 as the `HTTPZstd` product (HTTP ADR 0010: symbol-hidden, single-threaded, streaming). `apple-docs` decodes its Zstd blobs through it (`ZstdCodec`, bounded) instead of carrying its own vendored copy, so the process holds one libzstd.
 
 ## Implemented & Verified Promotion Branches
 
