@@ -51,6 +51,14 @@ Run one with `Fuzz/run.sh <Harness> [seconds]`, all with `Fuzz/ci.sh` (nightly i
   - Warm no-change sync (index ETag gate active, 412 roots skipped via 304 + 173 pages checked under roots without an
     index): Swift **~8–23 s** wall (**106 MiB** max RSS, **30 MiB** peak memory footprint) vs Bun **9.0 s** wall
     (**456 MiB** max RSS, **243 MiB** peak memory footprint).
+- Transport and pipeline (swiftui + uikit, 21,830 DocC pages, fresh DB, 100 in flight, warm CDN, macOS):
+  - Transport alone (5,000 GETs): HTTPClient 0.3 ms CPU/request vs URLSession 0.5–0.8 ms vs Bun 0.1 ms;
+    throughput within network noise of each other (≈1,000–1,300 req/s at 100 in flight).
+  - Sync at the default 500 req/s: all three ≈45–47 s — the politeness rate limit is the bound.
+  - Sync unlimited: URLSession build 45–53 s, HTTPClient build 36–52 s, Bun 39–42 s — all bound by the
+    single committing task, which also converted every page (86 % busy). Converting in the parallel fetch
+    tasks instead: **22.8 s** (Swift user CPU 24 → 15.7 s, 89–102 MiB peak) vs Bun 39–42 s (261–274 MiB);
+    identical documents, sections, and relationships.
 - `Benchmarks/compare-bun-mcp.py --bun … --swift … [--db corpus.db]`: per-call MCP latency (p50/p90/p99),
   interleaved between the servers, for repeated (cache-hitting) and, with `--db`, cold sampled calls, plus RSS.
   Cold latency is dominated by OS page-cache residency of each database file, so give Bun a fresh copy of its

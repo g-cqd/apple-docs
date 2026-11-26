@@ -141,9 +141,22 @@ public enum SyncOrchestrator: Sendable {
             return entry(.failure(SourceError.unsafeURL(item.path, reason: "invalid key")))
         }
         do {
-            return entry(.success(try await adapter.fetch(key: key, previousETag: item.etag, client: client)))
+            let outcome = try await adapter.fetch(key: key, previousETag: item.etag, client: client)
+            return entry(.success(preconverted(outcome)))
         } catch {
             return entry(.failure(error))
         }
+    }
+
+    /// Converts a modified payload here, in the parallel fetch task, so the single committing task only
+    /// writes: conversion is pure CPU and was ~60 % of the serial commit path. A payload that fails to
+    /// convert is passed through unchanged, so the commit reports the same error as before.
+    private static func preconverted(_ outcome: SourceFetchOutcome) -> SourceFetchOutcome {
+        guard case .modified(let payload, let etag, let discoveredKeys) = outcome, payload.converted == nil,
+            let converted = try? SyncPipeline.convert(payload)
+        else {
+            return outcome
+        }
+        return .modified(payload: SourcePayload(converted: converted), etag: etag, discoveredKeys: discoveredKeys)
     }
 }
