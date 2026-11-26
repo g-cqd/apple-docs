@@ -1,0 +1,100 @@
+{
+  "project": {
+    "linux": true
+  },
+  "swift": {
+    "versions": [
+      "6.4.2"
+    ],
+    "parallel": true
+  },
+  "checks": {
+    "macos-release": [
+      "push",
+      "pull-request",
+      "merge-queue",
+      "tag",
+      "dispatch",
+      "nightly"
+    ]
+  },
+  "quality": {
+    "paths": [
+      "Sources"
+    ],
+    "analyzers": [
+      "deadwood",
+      "dolly",
+      "arcleak",
+      "fcheck",
+      "modeler"
+    ],
+    "include": [
+      "/Package.swift",
+      "Sources/**",
+      "Tests/**"
+    ],
+    "local": [
+      "litmus"
+    ],
+    "discipline": {
+      "shipped": [
+        "Sources"
+      ],
+      "forceUnwrap": true,
+      "rules": [
+        "strtod",
+        "inline-prng",
+        "untyped-throws",
+        "wall-clock"
+      ]
+    }
+  },
+  "release": {
+    "executables": [
+      "apple-docs"
+    ],
+    "notes": "docs/releases/{tag}.md",
+    "noteStyle": "freeform",
+    "appleSigning": {
+      "sign": true,
+      "identifier": "apple-docs",
+      "hardenedRuntime": true,
+      "notarize": true,
+      "requireOnTag": true
+    }
+  },
+  "commands": [
+    {
+      "id": "layer-guards",
+      "title": "Quality · Layering & Scripts",
+      "run": "python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py",
+      "os": "linux"
+    },
+    {
+      "id": "dependency-audit",
+      "title": "Quality · Declared Dependencies",
+      "run": "Scripts/dependency-audit.sh",
+      "os": "macOS"
+    },
+    {
+      "id": "mutation",
+      "title": "Verification · Mutation (litmus)",
+      "os": "macOS",
+      "cadence": [
+        "nightly",
+        "dispatch"
+      ],
+      "mutation": {
+        "paths": [
+          "Sources/AppleDocsCore/**",
+          "Sources/AppleDocsOutput/**",
+          "Sources/AppleDocsStorage/**",
+          "Sources/AppleDocsSearch/**"
+        ],
+        "budget": 3600,
+        "workspace": "copy"
+      }
+    }
+  ]
+}

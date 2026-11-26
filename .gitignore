@@ -1,0 +1,9 @@
+.build/
+.build-release/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+__pycache__/
+*.pyc
+fuzz-corpus/
+docs/formal/states/

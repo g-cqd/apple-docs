@@ -1,0 +1,37 @@
+name: Workflow Hygiene
+
+# Static security and syntax linting of all GitHub Actions workflows (zizmor + actionlint).
+on:
+  push:
+    branches: [main, swift]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-workflows:
+    name: Quality · Workflow Hygiene · Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup · Check Out Sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Quality · actionlint
+        uses: rhysd/actionlint@914e7df21a07efbf03b6821592836a35224b609b # v1.7.7
+      - name: Quality · zizmor
+        run: |
+          pipx install zizmor==1.16.3
+          zizmor --offline --persona=pedantic .github/workflows

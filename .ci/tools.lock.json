@@ -1,0 +1,162 @@
+{
+  "tools": [
+    {
+      "name": "arcleak",
+      "version": "0.17.10",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/arcleak/releases/download/v{version}/arcleak-{version}-macos-arm64.tar.gz",
+          "sha256": "c704c464e45f93384bcf739cde6db044f4d20082e43bb92bac0a732cbf438f03"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/g-cqd/arcleak/releases/download/v{version}/arcleak-{version}-linux-x86_64.tar.gz",
+          "sha256": "1df960f4966322757bf7eea3422d6bf98c94f429bfdc0bb93aaa03fbeb44c028"
+        }
+      },
+      "binary": "arcleak-{version}-{platform}/arcleak",
+      "arguments": [
+        "analyze",
+        "--strict",
+        "--no-cache",
+        "--relative-to",
+        "."
+      ]
+    },
+    {
+      "name": "deadwood",
+      "version": "0.16.4",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/deadwood/releases/download/v{version}/deadwood-{version}-macos-arm64.tar.gz",
+          "sha256": "7dce2c4af747d681d8113789abbb8b8ceb4d34fd36f01a6603808dbde2ee924a"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/g-cqd/deadwood/releases/download/v{version}/deadwood-{version}-linux-x86_64.tar.gz",
+          "sha256": "b164e9d9deb1cfe65415068bbaddb53b3fbab987046555e8d7fc20c5e8ee1b0d"
+        }
+      },
+      "binary": "deadwood-{version}-{platform}/deadwood",
+      "arguments": [
+        "analyze",
+        "--strict",
+        "--no-cache",
+        "--relative-to",
+        "."
+      ]
+    },
+    {
+      "name": "dolly",
+      "version": "0.14.8",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/dolly/releases/download/v{version}/dolly-{version}-macos-arm64.tar.gz",
+          "sha256": "323161150e723f7f5b65737a2382e0089ce0216527c51286c595e96700444c90"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/g-cqd/dolly/releases/download/v{version}/dolly-{version}-linux-x86_64.tar.gz",
+          "sha256": "c8907b5a7d8c49e7c35dc7d8bfd61b859cca2abfd6eee957f5b8abea228bb149"
+        }
+      },
+      "binary": "dolly-{version}-{platform}/dolly",
+      "arguments": [
+        "analyze",
+        "--strict",
+        "--no-cache",
+        "--relative-to",
+        "."
+      ]
+    },
+    {
+      "name": "fcheck",
+      "version": "0.4.10",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/fcheck/releases/download/v{version}/fcheck-{version}-macos-arm64.tar.gz",
+          "sha256": "cd61d7c35460936f76143ae56feafdef9c77c6f32ea5e7ee8e823d8c25fd232d"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/g-cqd/fcheck/releases/download/v{version}/fcheck-{version}-linux-x86_64.tar.gz",
+          "sha256": "f3fac172f43f27efbde3dc65f246f6ffee3fe271eef46c8316ef1059e8811be9"
+        }
+      },
+      "binary": "fcheck-{version}-{platform}/fcheck",
+      "arguments": [
+        "analyze",
+        "--strict",
+        "--no-cache",
+        "--relative-to",
+        "."
+      ]
+    },
+    {
+      "name": "modeler",
+      "version": "0.4.9",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/modeler/releases/download/v{version}/modeler-{version}-macos-arm64.tar.gz",
+          "sha256": "9f98050d00555951bec9a9db1ffa3e466fc67ea2bf4fd9dd87f3658d097cbba8"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/g-cqd/modeler/releases/download/v{version}/modeler-{version}-linux-x86_64.tar.gz",
+          "sha256": "174d567b55d47aebf3bbd354e33b3e25f7731130062c7c707a07d822d783afb8"
+        }
+      },
+      "binary": "modeler-{version}-{platform}/modeler",
+      "arguments": [
+        "check",
+        "--strict",
+        "--no-cache",
+        "--relative-to",
+        "."
+      ]
+    },
+    {
+      "name": "litmus",
+      "version": "0.4.11",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/g-cqd/litmus/releases/download/v{version}/litmus-{version}-macos-arm64.tar.gz",
+          "sha256": "4823be8687be31c79bb5fb80265764920065e0f6013c2a936aa9f53d3c6fabec"
+        }
+      },
+      "binary": "litmus-{version}-{platform}/litmus",
+      "arguments": null
+    },
+    {
+      "name": "swiftlint",
+      "version": "0.65.1",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/realm/SwiftLint/releases/download/{version}/portable_swiftlint.zip",
+          "sha256": "c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0",
+          "binary": "swiftlint"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/realm/SwiftLint/releases/download/{version}/swiftlint_linux_amd64.zip",
+          "sha256": "caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d",
+          "binary": "swiftlint"
+        }
+      },
+      "binary": "swiftlint",
+      "arguments": null
+    },
+    {
+      "name": "swiftformat",
+      "version": "0.64.7",
+      "archives": {
+        "macos-arm64": {
+          "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/{version}/swiftformat.zip",
+          "sha256": "e82e224325cbd3403fc7b68caf6c917926dc106de3af875fca4b87e3c4634038",
+          "binary": "swiftformat"
+        },
+        "linux-x86_64": {
+          "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/{version}/swiftformat_linux.zip",
+          "sha256": "819aea026e1c630f46b234ed84481e56d9eb3cfe7024cd51b1af55169c8e13bb",
+          "binary": "swiftformat_linux"
+        }
+      },
+      "binary": "swiftformat",
+      "arguments": null
+    }
+  ]
+}

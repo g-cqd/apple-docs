@@ -1,0 +1,31 @@
+name: CI
+
+# swift-ci plans and runs the checks from .ci/action.json (https://github.com/g-cqd/swift-ci).
+# `.ci/swift-ci local` runs the same checks on a developer's machine.
+on:
+  push:
+    branches: [main, swift]
+    tags: ["v*"]
+  pull_request:
+  merge_group:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Checks
+    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@056b8867a3714f40478f36909e110374adffb148 # swift-ci 056b886
+    permissions:
+      contents: write # publishes signed tag archives, CycloneDX SBOM, and release notes
+      id-token: write # SLSA build provenance attestation
+      attestations: write # SLSA build provenance attestation
+    secrets:
+      DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+      DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}

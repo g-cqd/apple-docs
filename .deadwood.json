@@ -1,0 +1,8 @@
+{
+  "production": false,
+  "rules": {
+    "unused-public-api": { "enabled": false },
+    "assign-only-property": { "enabled": true },
+    "referenced-only-by-tests": { "severity": "note" }
+  }
+}

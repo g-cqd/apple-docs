@@ -1,0 +1,15 @@
+# Hook configuration for `project-hooks` (https://github.com/g-cqd/project-hooks).
+pre-push:
+  test-override:
+    type: swift
+    skip: true
+  tasks:
+    - name: "CI quality"
+      run: ".ci/swift-ci run quality"
+      timeout: 600
+    - name: "Layering & script guards"
+      run: "python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py"
+      timeout: 120
+    - name: "Debug tests"
+      run: "swift test"
+      timeout: 900
