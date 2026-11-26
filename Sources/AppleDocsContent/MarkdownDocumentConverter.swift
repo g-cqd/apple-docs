@@ -1,4 +1,5 @@
 import AemiMarkdown
+import AemiYAML
 public import AppleDocsCore
 
 /// Converts CommonMark/GFM Markdown documents (Swift Evolution proposals, Swift Book chapters,
@@ -77,8 +78,15 @@ public enum MarkdownDocumentConverter: Sendable {
     }
 
     private static func extractFrontMatterField(named key: String, from raw: String) -> String? {
-        let prefix = "\(key):"
-        for line in raw.split(separator: "\n") {
+        let stripped = stripFrontMatterDelimiters(raw)
+        if let decoded = try? YAMLDecoder().decode([String: String].self, from: stripped),
+            let direct = decoded[key] ?? decoded[key.lowercased()],
+            !direct.isEmpty
+        {
+            return direct
+        }
+        let prefix = "\(key.lowercased()):"
+        for line in stripped.split(separator: "\n") {
             let trimmed = trimASCII(String(line))
             if trimmed.lowercased().hasPrefix(prefix) {
                 var value = trimASCII(String(trimmed.dropFirst(prefix.count)))
@@ -91,6 +99,14 @@ public enum MarkdownDocumentConverter: Sendable {
             }
         }
         return nil
+    }
+
+    private static func stripFrontMatterDelimiters(_ raw: String) -> String {
+        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false)
+        var body = lines
+        if let first = body.first, trimASCII(String(first)) == "---" { body.removeFirst() }
+        if let last = body.last, trimASCII(String(last)) == "---" { body.removeLast() }
+        return body.joined(separator: "\n")
     }
 
     private static func trimASCII(_ value: String) -> String {

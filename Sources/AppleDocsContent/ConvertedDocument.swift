@@ -1,14 +1,21 @@
 public import AppleDocsCore
 
 /// Normalized result produced by every content converter (`DocCJSONConverter`, `HTMLDocumentConverter`,
-/// `MarkdownDocumentConverter`), plus a shared section accumulator.
+/// `MarkdownDocumentConverter`), carrying the document record, ordered sections, and extracted
+/// outgoing relationship edges.
 public struct ConvertedDocument: Hashable, Sendable {
     public let document: DocumentRecord
     public let sections: [DocumentSectionRecord]
+    public let relationships: [DocumentRelationshipRecord]
 
-    public init(document: DocumentRecord, sections: [DocumentSectionRecord]) {
+    public init(
+        document: DocumentRecord,
+        sections: [DocumentSectionRecord],
+        relationships: [DocumentRelationshipRecord] = []
+    ) {
         self.document = document
         self.sections = sections
+        self.relationships = relationships
     }
 
     /// Accumulates heading-delimited section paragraphs/blocks into ordered ``DocumentSectionRecord`` entries.

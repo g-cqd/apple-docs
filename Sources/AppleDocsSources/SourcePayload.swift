@@ -3,7 +3,7 @@ public import AppleDocsCore
 /// Single normalized item yielded by any ``SourceAdapter`` for ingestion by ``SyncPipeline``.
 public struct SourcePayload: Hashable, Sendable {
     /// Wire encoding of ``body``.
-    public enum Encoding: Hashable, Sendable {
+    public enum Encoding: String, Hashable, Sendable, Codable {
         case doccJSON
         case html
         case markdown

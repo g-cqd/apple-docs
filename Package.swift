@@ -80,6 +80,7 @@ let package = Package(
                 "AppleDocsCore", .product(name: "AemiHTML", package: "AemiHTML"),
                 .product(name: "AemiJSON", package: "AemiJSON"),
                 .product(name: "AemiMarkdown", package: "AemiMarkdown"),
+                .product(name: "AemiYAML", package: "AemiHMMML"),
                 .product(name: "AemiLexers", package: "aemi")
             ],
             path: "Sources/AppleDocsContent",
@@ -108,12 +109,14 @@ let package = Package(
                 .product(name: "URLBuilder", package: "URLBuilder")
             ],
             path: "Sources/AppleDocsSources",
+            resources: [.process("Resources")],
             swiftSettings: strictSettings
         ),
         .target(
             name: "AppleDocsPipeline",
             dependencies: [
-                "AppleDocsCore", "AppleDocsContent", "AppleDocsSearch", "AppleDocsSources", "AppleDocsStorage"
+                "AppleDocsCore", "AppleDocsContent", "AppleDocsSearch", "AppleDocsSources", "AppleDocsStorage",
+                .product(name: "AemiSearch", package: "AemiSearch")
             ],
             path: "Sources/AppleDocsPipeline",
             swiftSettings: strictSettings
@@ -173,8 +176,9 @@ let package = Package(
         .executableTarget(
             name: "apple-docs",
             dependencies: [
-                "AppleDocsCommands", "AppleDocsCore", "AppleDocsMCP", "AppleDocsOutput", "AppleDocsSearch",
-                "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsStorage", "AppleDocsWeb",
+                "AppleDocsCommands", "AppleDocsCore", "AppleDocsMCP", "AppleDocsOutput", "AppleDocsPipeline",
+                "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsSources",
+                "AppleDocsStorage", "AppleDocsWeb",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/apple-docs",
@@ -232,8 +236,8 @@ let package = Package(
             name: "AppleDocsSetupTests",
             dependencies: [
                 "AppleDocsCommands", "AppleDocsContent", "AppleDocsCore", "AppleDocsPipeline",
-                "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsSources", "AppleDocsStorage",
-                "AppleDocsTestSupport"
+                "AppleDocsSearch", "AppleDocsSetup", "AppleDocsSetupDarwin", "AppleDocsSources",
+                "AppleDocsStorage", "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSetupTests",
             swiftSettings: strictSettings
