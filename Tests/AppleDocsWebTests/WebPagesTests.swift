@@ -160,4 +160,18 @@ struct WebPagesTests {
         )
         #expect(!html.contains("Creating Text View"))
     }
+
+    /// The embedded assets are served byte for byte as their `Resources/` sources (trailing newline included).
+    @Test func `bundled assets are served verbatim`() async throws {
+        let fixture = try WebCorpusFixture()
+        defer { fixture.remove() }
+        let responder = fixture.responder()
+        defer { Task { await responder.close() } }
+        let resources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/AppleDocsWeb/Resources")
+        for name in ["app.js", "style.css"] {
+            let served = await responder.respond(to: HTTPRequest(method: .get, path: "/assets/\(name)")).body
+            #expect(served == Array(try Data(contentsOf: resources.appendingPathComponent(name))), "\(name)")
+        }
+    }
 }

@@ -69,7 +69,7 @@ let package = Package(
             name: "AppleDocsStorage",
             dependencies: ["AppleDocsCore", "CSQLite", "CAppleDocsZstd"],
             path: "Sources/AppleDocsStorage",
-            resources: [.process("Resources")],
+            exclude: ["Resources"],
             swiftSettings: strictSettings
         ),
         .target(
@@ -111,7 +111,7 @@ let package = Package(
                 .product(name: "URLBuilder", package: "URLBuilder")
             ],
             path: "Sources/AppleDocsSources",
-            resources: [.process("Resources")],
+            exclude: ["Resources"],
             swiftSettings: strictSettings
         ),
         .target(
@@ -160,7 +160,7 @@ let package = Package(
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsMCP",
-            resources: [.process("Resources")],
+            exclude: ["Resources"],
             swiftSettings: strictSettings
         ),
         .target(
@@ -173,7 +173,7 @@ let package = Package(
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsWeb",
-            resources: [.process("Resources")],
+            exclude: ["Resources"],
             swiftSettings: strictSettings
         ),
         .executableTarget(

@@ -42,8 +42,24 @@ Run one with `Fuzz/run.sh <Harness> [seconds]`, all with `Fuzz/ci.sh` (nightly i
   with the previous commit on every push touching `Sources/`. Run: `swift package --package-path Benchmarks benchmark`.
 - `Benchmarks/compare-bun-sync.sh <framework> <runs> <concurrency>`: cold crawl of one framework, both
   implementations, alternating order.
-- `Benchmarks/compare-bun-mcp.py --bun … --swift … [--db corpus.db]`: per-call MCP latency (p50/p90/p99) for
-  repeated (cache-hitting) and, with `--db`, cold sampled calls, plus server RSS.
+- `Benchmarks/compare-bun-mcp.py --bun … --swift … [--db corpus.db]`: per-call MCP latency (p50/p90/p99),
+  interleaved between the servers, for repeated (cache-hitting) and, with `--db`, cold sampled calls, plus RSS.
+  Cold latency is dominated by OS page-cache residency of each database file, so give Bun a fresh copy of its
+  database (`mcp start --home DIR`) made alongside the Swift one. Measured that way over the full corpus (cold,
+  distinct pages, MCP cache off): `read_doc` p50 8.8 ms (Swift) vs 9.4 ms (Bun), p99 42.6 vs 43.4 ms; paginated
+  p50 7.4 vs 7.1 ms, p99 28.4 vs 34.1 ms; RSS 99 vs 182 MiB. Warm, both serve a page in ~0.14 ms.
+
+## Release path
+
+`swift-ci run archive-macos` / `archive-linux` and `swift-ci publish --dry-run` were exercised end to end for
+v2.0.0-alpha.1 (no tag pushed). The macOS archive is signed with Developer ID and the hardened runtime and passes
+`codesign --verify --strict`; it ships `libswiftCompatibilitySpan.dylib` (Apple-signed, needed below macOS 26) with
+only portable rpaths (`/usr/lib/swift`, then `@loader_path`), and a hardened process loads the bundled copy. The
+Linux archive bundles the Swift runtime and runs with the build toolchain hidden. Both archives are single
+executables: resources are compiled in (`Scripts/embed-resources.py`), so no SwiftPM resource bundle has to travel
+with the binary. `publish` produces the archives, a SwiftPM artifact bundle, a CycloneDX 1.5 SBOM, checksums, and the
+filled release note. Notarization runs in CI from the `NOTARY_*` secrets and fails closed on tags without them; it
+was not submitted from this dry run.
 
 ## Other gates
 

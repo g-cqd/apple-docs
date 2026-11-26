@@ -5,9 +5,13 @@ Usage:
   Benchmarks/compare-bun-mcp.py --bun "bun ../apple-docs/cli.js mcp start" \
       --swift ".build/release/apple-docs mcp stdio --db /tmp/v1.db" [--rounds 200]
 
-For each case, sends `rounds` sequential tools/call requests (after 10 warm-up calls) and reports p50/p90/p99
-latency per server, plus each server's resident memory at the end (ps RSS). Requests are strictly sequential
-(one in flight), so this measures per-call latency, not throughput.
+For each case, sends `rounds` tools/call requests (after 10 warm-up calls) to both servers, interleaved call by call
+(alternating which goes first), and reports p50/p90/p99 latency per server plus resident memory (ps RSS). One request
+is in flight at a time, so this measures per-call latency, not throughput.
+
+Cold numbers are dominated by whether each database file's pages are in the OS page cache. Compare like with like:
+give Bun a fresh copy of its database (`--bun "… mcp start --home DIR"`) made at the same time as the Swift one, as
+interleaving alone cannot equalize a file that other processes keep hot.
 
 Repeated cases hit both servers' tool-result caches; with --db, "cold" cases also read a different sampled page
 (or query) per call, so every call misses the caches.
@@ -96,17 +100,18 @@ def main():
     print(f"{'case':24} {'server':6} {'p50 ms':>8} {'p90 ms':>8} {'p99 ms':>8}")
     for label, variants in cases:
         name = label.split(" ")[0]
-        for server_name, server in servers.items():
-            calls = [variants[index % len(variants)] for index in range(args.rounds + 10)]
-            for arguments in calls[:10]:
-                server.tool(name, arguments)
-            samples = []
-            for arguments in calls[10:]:
+        calls = [variants[index % len(variants)] for index in range(args.rounds + 10)]
+        samples = {server_name: [] for server_name in servers}
+        for index, arguments in enumerate(calls):
+            order = list(servers) if index % 2 == 0 else list(servers)[::-1]
+            for server_name in order:
                 start = time.perf_counter()
-                server.tool(name, arguments)
-                samples.append((time.perf_counter() - start) * 1000)
-            print(f"{label:24} {server_name:6} {percentile(samples, 0.5):8.3f} {percentile(samples, 0.9):8.3f} "
-                  f"{percentile(samples, 0.99):8.3f}")
+                servers[server_name].tool(name, arguments)
+                if index >= 10:
+                    samples[server_name].append((time.perf_counter() - start) * 1000)
+        for server_name, values in samples.items():
+            print(f"{label:24} {server_name:6} {percentile(values, 0.5):8.3f} {percentile(values, 0.9):8.3f} "
+                  f"{percentile(values, 0.99):8.3f}")
     for server_name, server in servers.items():
         print(f"{server_name} RSS after run: {server.rss_mib():.0f} MiB")
         server.close()

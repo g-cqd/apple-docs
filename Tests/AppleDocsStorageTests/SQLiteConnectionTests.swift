@@ -119,4 +119,19 @@ struct SQLiteConnectionTests {
         #expect(await pool.totalCreatedConnections <= 3)
         await pool.close()
     }
+
+    /// Sequential callers must get the same connection back (its page cache stays warm): the release has to complete
+    /// before `withConnection` returns.
+    @Test func `sequential use of the reader pool reuses one connection`() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("pool-seq-\(UUID().uuidString).db")
+            .path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try CorpusStore(path: path, options: .readWrite).close()
+        let pool = SQLiteReaderPool(path: path, maxReaders: 4)
+        for _ in 0 ..< 200 {
+            _ = try await pool.withConnection { try $0.queryOne("SELECT 1")?.integer(at: 0) }
+        }
+        #expect(await pool.totalCreatedConnections == 1)
+        await pool.close()
+    }
 }

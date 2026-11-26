@@ -24,8 +24,11 @@ public actor SQLiteReaderPool {
         _ body: @Sendable (SQLiteConnection) throws -> T
     ) async throws -> T {
         let slot = try await acquire()
-        defer { Task { await self.release(slot) } }
-        return try body(slot.connection)
+        // Release before returning (not in a detached task): a sequential caller's next request then gets the same
+        // connection back, keeping its page cache warm instead of opening another cold connection.
+        let result = Result { try body(slot.connection) }
+        await release(slot)
+        return try result.get()
     }
 
     /// Closes all idle connections and cancels any pending waiters with ``SQLiteError/closed``.

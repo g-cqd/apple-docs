@@ -29,10 +29,7 @@ public struct MCPToolDescriptor: Equatable, Sendable {
     public static let allTools: [Self] = loadCatalog()
 
     private static func loadCatalog() -> [Self] {
-        guard let url = Bundle.module.url(forResource: "mcp-tools", withExtension: "json"),
-            let data = try? Data(contentsOf: url),
-            let doc = try? AemiJSON.parse(Array(data)),
-            let items = doc.root.array
+        guard let doc = try? AemiJSON.parse(Array(EmbeddedMCPTools.text.utf8)), let items = doc.root.array
         else {
             return []
         }

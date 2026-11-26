@@ -54,13 +54,6 @@ public enum CorpusSchemaV1: Sendable {
     }
 
     private static func loadDDL() throws(SQLiteError) -> String {
-        guard let url = Bundle.module.url(forResource: "schema-v1", withExtension: "sql") else {
-            throw .transactionFailed("Missing bundled schema-v1.sql resource.")
-        }
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            throw .transactionFailed("Unable to read schema-v1.sql: \(error)")
-        }
+        EmbeddedCorpusSchema.text + "\n" + EmbeddedAssetSchema.text
     }
 }

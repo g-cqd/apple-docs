@@ -1,6 +1,6 @@
 import Foundation
 
-/// The UI's static assets (`/assets/<name>`), loaded once from the module bundle and kept in memory.
+/// The UI's static assets (`/assets/<name>`), embedded in the binary (see `Scripts/embed-resources.py`).
 enum WebAssetCatalog {
     /// One servable asset.
     struct Asset: Sendable {
@@ -8,22 +8,11 @@ enum WebAssetCatalog {
         let contentType: String
     }
 
-    private static let manifest: [(name: String, ext: String, contentType: String)] = [
-        ("style", "css", "text/css; charset=utf-8"),
-        ("app", "js", "text/javascript; charset=utf-8")
+    /// Every bundled asset keyed by its public file name (`style.css`, `app.js`), compiled into the binary.
+    static let assets: [String: Asset] = [
+        "style.css": Asset(bytes: Array(EmbeddedStylesheet.text.utf8), contentType: "text/css; charset=utf-8"),
+        "app.js": Asset(bytes: Array(EmbeddedScript.text.utf8), contentType: "text/javascript; charset=utf-8")
     ]
-
-    /// Every bundled asset keyed by its public file name (`style.css`, `app.js`).
-    static let assets: [String: Asset] = {
-        var loaded: [String: Asset] = [:]
-        for entry in manifest {
-            guard let url = Bundle.module.url(forResource: entry.name, withExtension: entry.ext),
-                let data = try? Data(contentsOf: url)
-            else { continue }
-            loaded["\(entry.name).\(entry.ext)"] = Asset(bytes: Array(data), contentType: entry.contentType)
-        }
-        return loaded
-    }()
 
     /// The asset named exactly `name` (no path segments), if bundled.
     static func asset(named name: String) -> Asset? {

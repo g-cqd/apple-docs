@@ -33,9 +33,9 @@ public enum SourceRegistry: Sendable {
     }
 
     private static func loadCatalog() -> [SourceKind: WebSourceAdapter] {
-        guard let url = Bundle.module.url(forResource: "sources", withExtension: "json"),
-            let data = try? Data(contentsOf: url),
-            let specs = try? JSONDecoder().decode([WebSourceAdapter.Spec].self, from: data)
+        guard
+            let specs = try? JSONDecoder()
+                .decode([WebSourceAdapter.Spec].self, from: Data(EmbeddedSourceRegistry.text.utf8))
         else {
             return [:]
         }

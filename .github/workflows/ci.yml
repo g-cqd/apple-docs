@@ -18,7 +18,7 @@ permissions:
 jobs:
   ci:
     name: Checks
-    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@056b8867a3714f40478f36909e110374adffb148 # swift-ci 056b886
+    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@bc75744be429866737b28a273405d80c6f2bfeb0 # swift-ci bc75744
     permissions:
       contents: write # publishes signed tag archives, CycloneDX SBOM, and release notes
       id-token: write # SLSA build provenance attestation
