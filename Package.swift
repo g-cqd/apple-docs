@@ -47,6 +47,7 @@ let package = Package(
         .package(url: "https://github.com/g-cqd/URLBuilder.git", revision: "850b231f7d40b394bde6b5aeaa8dc208dbc4e182"),
         .package(url: "https://github.com/g-cqd/HTTP.git", revision: "974a50afa7d1abd613d530e8eb49bcbb9882e9cf"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.8.2")),
+        .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", .upToNextMinor(from: "1.0.2"))
     ],
     targets: [
@@ -179,9 +180,12 @@ let package = Package(
                 "AppleDocsCommands",
                 "AppleDocsCore",
                 "AppleDocsOutput",
+                "AppleDocsSearch",
+                "AppleDocsStorage",
                 .product(name: "AemiJSON", package: "AemiJSON"),
                 .product(name: "AemiJSONRPC", package: "AemiJSON"),
-                .product(name: "AemiHTTP", package: "HTTP")
+                .product(name: "AemiHTTP", package: "HTTP"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsMCP",
             swiftSettings: strictSettings
@@ -206,7 +210,9 @@ let package = Package(
                 "AppleDocsCore",
                 "AppleDocsMCP",
                 "AppleDocsOutput",
+                "AppleDocsSearch",
                 "AppleDocsSetup",
+                "AppleDocsStorage",
                 "AppleDocsWeb",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
@@ -260,6 +266,23 @@ let package = Package(
                 "AppleDocsTestSupport"
             ],
             path: "Tests/AppleDocsSearchTests",
+            swiftSettings: strictSettings
+        ),
+        .testTarget(
+            name: "AppleDocsMCPTests",
+            dependencies: [
+                "AppleDocsCommands",
+                "AppleDocsCore",
+                "AppleDocsMCP",
+                "AppleDocsOutput",
+                "AppleDocsSearch",
+                "AppleDocsStorage",
+                "AppleDocsTestSupport",
+                .product(name: "AemiHTTP", package: "HTTP"),
+                .product(name: "AemiJSON", package: "AemiJSON"),
+                .product(name: "AemiJSONRPC", package: "AemiJSON")
+            ],
+            path: "Tests/AppleDocsMCPTests",
             swiftSettings: strictSettings
         )
     ]

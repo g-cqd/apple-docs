@@ -53,6 +53,8 @@ ALLOWED = {
         "AppleDocsCommands",
         "AppleDocsCore",
         "AppleDocsOutput",
+        "AppleDocsSearch",
+        "AppleDocsStorage",
     },
     "AppleDocsWeb": {
         "AppleDocsCommands",
