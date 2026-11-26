@@ -10,6 +10,8 @@ public enum SQLiteError: Error, Hashable, Sendable, CustomStringConvertible {
     case typeMismatch(column: Int, expected: String)
     /// Attempted to bind a parameter index out of range (`1...parameterCount`).
     case invalidParameterIndex(Int)
+    /// A named statement parameter had no value in the binding dictionary.
+    case missingParameter(String)
     /// Attempted to read from a legacy or unsupported database schema.
     case unsupportedSchema(found: Int)
     /// Transaction commit or rollback failed while unwinding.
@@ -25,6 +27,8 @@ public enum SQLiteError: Error, Hashable, Sendable, CustomStringConvertible {
                 "SQLite column \(column) cannot be read as \(expected)."
             case .invalidParameterIndex(let index):
                 "SQLite bind parameter index \(index) is out of range."
+            case .missingParameter(let name):
+                "SQLite named parameter \(name) was not bound."
             case .unsupportedSchema(let found):
                 "Unsupported corpus schema version \(found)."
             case .transactionFailed(let detail):

@@ -89,7 +89,8 @@ let package = Package(
             dependencies: [
                 "AppleDocsCore", "AppleDocsStorage", .product(name: "AemiSearch", package: "AemiSearch"),
                 .product(name: "AemiProtobuf", package: "AemiProtobuf"),
-                .product(name: "AemiJSONCore", package: "AemiJSON")
+                .product(name: "AemiJSONCore", package: "AemiJSON"),
+                .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsSearch",
             swiftSettings: strictSettings

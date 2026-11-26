@@ -1,5 +1,6 @@
 public import AemiJSONCore
 import AppleDocsCore
+import AppleDocsSearch
 public import AppleDocsStorage
 import OrderedCollections
 
@@ -28,18 +29,13 @@ extension ToolPayloads {
         }
     }
 
-    private struct Root {
-        let slug: String
-        let displayName: String
-        let kind: String
-        let sourceType: String
-    }
+    private typealias Root = CorpusRootResolver.Root
 
     public static func browse(_ request: BrowseRequest, on connection: SQLiteConnection) throws -> JSONValue {
         guard let framework = request.framework, !framework.isEmpty else {
             throw ToolPayloadError("framework is required")
         }
-        guard let root = try resolveRoot(framework, on: connection) else {
+        guard let root = try CorpusRootResolver.resolve(framework, on: connection) else {
             throw ToolPayloadError("Unknown framework: \(framework)")
         }
         let isWWDC = root.sourceType == "wwdc"
@@ -138,24 +134,5 @@ extension ToolPayloads {
             "framework": .string(root.displayName), "slug": .string(root.slug), "kind": .string(root.kind),
             "groups": .array(groups), "total": .int(Int64(pages.count))
         ])
-    }
-
-    /// `resolveRoot`: exact slug, then case-insensitive slug, display-name substring, slug substring.
-    private static func resolveRoot(_ input: String, on connection: SQLiteConnection) throws(SQLiteError) -> Root? {
-        let roots = try objects(
-            "SELECT slug, display_name, kind, source_type FROM roots ORDER BY slug",
-            columns: [.text("slug"), .text("display_name"), .text("kind"), .text("source_type")],
-            on: connection
-        )
-        .compactMap { row -> Root? in
-            guard case .object(let object) = row, case .string(let slug)? = object["slug"],
-                case .string(let name)? = object["display_name"], case .string(let kind)? = object["kind"],
-                case .string(let source)? = object["source_type"]
-            else { return nil }
-            return Root(slug: slug, displayName: name, kind: kind, sourceType: source)
-        }
-        let lower = input.lowercased()
-        return roots.first { $0.slug == input } ?? roots.first { $0.slug.lowercased() == lower }
-            ?? roots.first { $0.displayName.lowercased().contains(lower) } ?? roots.first { $0.slug.contains(lower) }
     }
 }

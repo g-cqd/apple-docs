@@ -16,6 +16,44 @@ extension LegacyV31Importer {
 
     static func rebuildSearchIndexes(on db: SQLiteConnection, available: Set<String>) throws(SQLiteError) {
         try executeAvailable(Self.ftsCopySteps, available: available, on: db)
+        if available.contains("documents_body_fts") { try copyBodyIndex(on: db) }
+    }
+
+    /// Bun's body index is contentless (its text cannot be read back): its FTS5 shadow tables are copied verbatim,
+    /// giving identical postings and document lengths, hence identical bm25 scores. A content-bearing legacy index
+    /// is re-inserted row by row instead.
+    private static func copyBodyIndex(on db: SQLiteConnection) throws(SQLiteError) {
+        let definition =
+            try db.queryOne(
+                "SELECT sql FROM legacy.sqlite_master WHERE name = 'documents_body_fts'"
+            )?
+            .optionalText(at: 0) ?? ""
+        guard definition.contains("content=''"), definition.contains("contentless_delete=1") else {
+            try db.executeScript(
+                """
+                DELETE FROM documents_body_fts;
+                INSERT INTO documents_body_fts (rowid, body)
+                SELECT rowid, body FROM legacy.documents_body_fts WHERE rowid IN (SELECT id FROM documents);
+                """
+            )
+            return
+        }
+        do {
+            try db.withShadowTableWrites {
+                for shadow in ["data", "idx", "docsize", "config"] {
+                    try db.executeScript(
+                        """
+                        DELETE FROM documents_body_fts_\(shadow);
+                        INSERT INTO documents_body_fts_\(shadow) SELECT * FROM legacy.documents_body_fts_\(shadow);
+                        """
+                    )
+                }
+            }
+        } catch let error as SQLiteError {
+            throw error
+        } catch {
+            throw .closed
+        }
     }
 
     private static func executeAvailable(
@@ -167,12 +205,10 @@ extension LegacyV31Importer {
 
     private static let ftsCopySteps: [(table: String, sql: String)] = [
         (
-            "documents_body_fts",
+            "framework_synonyms",
             """
-            DELETE FROM documents_body_fts;
-            INSERT INTO documents_body_fts (rowid, body)
-            SELECT rowid, body FROM legacy.documents_body_fts
-            WHERE rowid IN (SELECT id FROM documents);
+            INSERT OR REPLACE INTO framework_synonyms (canonical, alias)
+            SELECT lower(canonical), lower(alias) FROM legacy.framework_synonyms;
             """
         ),
         (

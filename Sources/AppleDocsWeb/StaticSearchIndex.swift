@@ -24,7 +24,7 @@ enum StaticSearchIndex {
         let sorted = keys.sorted()
         for start in stride(from: 0, to: sorted.count, by: 500) {
             let batch = sorted[start ..< min(start + 500, sorted.count)]
-            let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+            let placeholders = SQLiteConnection.placeholders(batch.count)
             let sqlRows = try store.connection.query(
                 """
                 SELECT key, title, abstract_text, framework, kind, role_heading FROM documents

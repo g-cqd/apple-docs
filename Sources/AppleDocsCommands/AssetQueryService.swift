@@ -1,3 +1,4 @@
+import AppleDocsCore
 public import AppleDocsOutput
 import AppleDocsSearch
 public import AppleDocsStorage
@@ -14,7 +15,7 @@ public enum AssetQueryService: Sendable {
     ) throws(SQLiteError) -> [PublicSFSymbol] {
         let validScope = (scope == "private") ? "private" : "public"
         let clampedLimit = max(1, min(limit, 500))
-        let trimmed = FTSQueryBuilder.trimWhitespace(query)
+        let trimmed = DocumentPlainText.trim(query)
 
         let rows: [SQLiteRow]
         if trimmed.isEmpty {
@@ -84,6 +85,7 @@ public enum AssetQueryService: Sendable {
         var filesByFamily: [String: [PublicAppleFontFamily.FontFile]] = [:]
         for row in fileRows {
             let familyID = try row.text(at: 0)
+            // @dl:accept -- column-to-argument mapping of the font-file row (field list)
             let file = PublicAppleFontFamily.FontFile(
                 id: try row.text(at: 1),
                 fileName: try row.text(at: 2),
@@ -96,6 +98,7 @@ public enum AssetQueryService: Sendable {
             )
             filesByFamily[familyID, default: []].append(file)
         }
+        // @dl:disable -- column-to-argument mapping of the font-family row (field list)
         return try familyRows.map { row throws(SQLiteError) in
             let id = try row.text(at: 0)
             return PublicAppleFontFamily(
@@ -106,6 +109,7 @@ public enum AssetQueryService: Sendable {
                 files: filesByFamily[id] ?? []
             )
         }
+        // @dl:enable
     }
 
     private static func decodeSymbol(_ row: SQLiteRow) throws(SQLiteError) -> PublicSFSymbol {

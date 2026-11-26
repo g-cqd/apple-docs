@@ -45,6 +45,25 @@ final class SQLiteStatement {
         }
     }
 
+    /// Binds named parameters (`$name`, `:name`, `@name`; the key includes the prefix). Every parameter the
+    /// statement declares must be supplied, so a typo can never silently bind `NULL`.
+    func bind(named values: [String: SQLiteValue]) throws(SQLiteError) {
+        guard let stmt = handle else { throw .closed }
+        let count = unsafe sqlite3_bind_parameter_count(stmt)
+        guard count > 0 else { return }
+        for index in Int32(1) ... count {
+            guard let rawName = unsafe sqlite3_bind_parameter_name(stmt, index) else {
+                throw .invalidParameterIndex(Int(index))
+            }
+            let name = unsafe String(cString: rawName)
+            guard let value = values[name] else { throw .missingParameter(name) }
+            let rc = bindSingle(value, at: index, on: stmt)
+            guard rc == SQLITE_OK else {
+                throw SQLiteError.fromHandle(unsafe sqlite3_db_handle(stmt), code: rc)
+            }
+        }
+    }
+
     /// Executes the statement to completion without returning rows.
     func run() throws(SQLiteError) {
         guard let stmt = handle else { throw .closed }

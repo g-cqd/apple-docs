@@ -16,15 +16,12 @@ extension CorpusStore {
         return try row.integer(at: 0)
     }
 
-    /// Replaces all sections for `documentID` and updates `documents_body_fts` in sync.
+    /// Replaces all sections for `documentID` and re-indexes its body (Bun's plain-text body) in sync.
     public func replaceSections(
         forDocumentID documentID: Int64,
         sections: [DocumentSectionRecord]
     ) throws(SQLiteError) {
         try connection.execute("DELETE FROM document_sections WHERE document_id = ?", bindings: [.integer(documentID)])
-        try connection.execute("DELETE FROM documents_body_fts WHERE rowid = ?", bindings: [.integer(documentID)])
-        var bodyParts: [String] = []
-        bodyParts.reserveCapacity(sections.count)
         for section in sections {
             try connection.execute(
                 """
@@ -41,16 +38,8 @@ extension CorpusStore {
                     .integer(Int64(section.sortOrder))
                 ]
             )
-            if !section.contentText.isEmpty {
-                bodyParts.append(section.contentText)
-            }
         }
-        if !bodyParts.isEmpty {
-            try connection.execute(
-                "INSERT INTO documents_body_fts (rowid, body) VALUES (?, ?)",
-                bindings: [.integer(documentID), .text(bodyParts.joined(separator: "\n"))]
-            )
-        }
+        try indexBody(documentID: documentID, sections: sections)
     }
 
     /// Fetches a document record by its validated canonical ``DocumentKey``.

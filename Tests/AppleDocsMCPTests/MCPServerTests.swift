@@ -22,7 +22,7 @@ struct MCPServerTests {
             usr: "s:7SwiftUI4ViewP",
             abstractText: "A type that represents part of your app UI."
         )
-        let projected = PublicSearchResult(document: doc, confidence: SearchConfidence.exact.rawValue)
+        let projected = PublicSearchResult(document: doc, confidence: "exact")
         let json = try PublicProjection.encodeJSON(projected)
 
         #expect(json.contains("\"path\":\"swiftui\\/view\"") || json.contains("\"path\":\"swiftui/view\""))

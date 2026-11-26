@@ -22,6 +22,7 @@ public final class CorpusStore {
         }
         self.connection = conn
         self.ownsConnection = true
+        if options.mode == .readWriteCreate { try migrateBodyIndexIfNeeded() }
     }
 
     /// A store over a connection someone else owns (a reader pool's): ``close()`` leaves it open.

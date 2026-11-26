@@ -11,10 +11,11 @@ hostile input. Everything here runs locally; CI runs the same commands from `.ci
 | Live corpus diff | Two databases synced from the live site by each implementation: documents, sections (incl. zstd-compressed Bun cells), relationships | `Scripts/diff-bun-corpus.py swift.db bun.db --strict` |
 | MCP tool outputs | `tools/call` results of both servers over the same corpus, structurally (32 default cases: every `read_doc` mode incl. pagination/sections/match/errors, `browse`, `list_frameworks`, `list_taxonomy`, asset tools) | `Scripts/diff-mcp-tools.py --bun "bun ../apple-docs/cli.js mcp start" --swift ".build/debug/apple-docs mcp stdio --db <db>"` (`--cases file.json` for custom sets) |
 
-Status: Compression (66 pages) and PDFKit (740) live corpora are identical; MCP outputs are identical for 30/32
-default cases and 120/122 sampled paginated `read_doc` calls. Known differences: `search_docs` ranking (Bun's
-search cascade is not ported yet) and 693 imported keys with uppercase characters (the Swift corpus lowercases
-keys; Bun resolves them case-sensitively).
+Status: Compression (66 pages) and PDFKit (740) live corpora are identical; MCP outputs are identical for 32/32
+default cases, 120/122 sampled paginated `read_doc` calls, and 105/106 `search_docs` calls covering random titles,
+intents, typos, relaxation, framework/source/kind/minVersion/deprecated/year filters, pagination, and `read=true`
+(semantic tier on, over the full imported corpus). The only known difference: 693 imported keys with uppercase
+characters (the Swift corpus lowercases keys; Bun keeps their case), which shows up in paths.
 
 ## Fuzzing
 

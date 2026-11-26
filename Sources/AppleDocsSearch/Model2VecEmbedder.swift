@@ -67,18 +67,17 @@ public struct Model2VecEmbedder: Sendable {
                 acc[d] += Double(matrix.weights[base + d])
             }
         }
+        // Bun: mean stored as float32, then `l2normalize` over those float32 values in double precision.
         let inv = 1.0 / Double(ids.count)
         var vec = [Float](repeating: 0, count: dims)
         var normSq: Double = 0
         for d in 0 ..< dims {
-            let value = acc[d] * inv
-            vec[d] = Float(value)
-            normSq += value * value
+            vec[d] = Float(acc[d] * inv)
+            normSq += Double(vec[d]) * Double(vec[d])
         }
         let norm = normSq.squareRoot()
         if norm > 0 {
-            let invNorm = Float(1.0 / norm)
-            for d in 0 ..< dims { vec[d] *= invNorm }
+            for d in 0 ..< dims { vec[d] = Float(Double(vec[d]) / norm) }
         }
         return vec
     }

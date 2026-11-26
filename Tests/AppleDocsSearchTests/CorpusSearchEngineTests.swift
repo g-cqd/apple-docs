@@ -1,12 +1,13 @@
 import AemiSearch
 import AppleDocsCore
-import AppleDocsSearch
 import AppleDocsStorage
 import Testing
 
-@Suite("CorpusSearchEngine & FTSQueryBuilder")
+@testable import AppleDocsSearch
+
+@Suite("Search pipeline (Bun commands/search.js parity)")
 struct CorpusSearchEngineTests {
-    @Test func `builds qualified identifier and CamelCase FTS5 queries safely`() {
+    @Test func `builds Bun FTS5 expressions for qualified, CamelCase, and explicit queries`() {
         #expect(FTSQueryBuilder.buildLexicalQuery("   ") == "\"\"")
         #expect(
             FTSQueryBuilder.buildLexicalQuery("NavigationStack")
@@ -17,61 +18,90 @@ struct CorpusSearchEngineTests {
                 .contains("\"avaudiosessionrouteselection\"*")
         )
         #expect(FTSQueryBuilder.buildLexicalQuery("foo AND bar") == "foo AND bar")
+        #expect(FTSQueryBuilder.buildLexicalQuery(#"say "hi""#) == #"say "hi""#)
         #expect(FTSQueryBuilder.sanitizeTrigramQuery("View.body") == "\"View.body\"")
         #expect(FTSQueryBuilder.sanitizeTrigramQuery("NavigationStack") == "NavigationStack")
     }
 
-    @Test func `cascades exact title, USR, FTS5, and body with platform and deprecation filters`() throws {
+    @Test func `cascades exact title, FTS5 tiers, body, and post-filters like Bun`() throws {
         let store = try seedNavigationCorpus()
+        defer { store.close() }
 
-        let exactHits = try CorpusSearchEngine.search(
-            CorpusSearchRequest(query: "NavigationStack", deprecated: .exclude),
+        let exact = try CorpusSearch.search(
+            SearchOptions(query: "NavigationStack", deprecated: "exclude"),
             on: store.connection
         )
-        #expect(exactHits.first?.document.key.rawValue == "swiftui/navigationstack")
-        #expect(exactHits.first?.confidence == .exact)
-        #expect(!exactHits.contains { $0.document.isDeprecated })
+        #expect(exact.results.first?.path == "swiftui/navigationstack")
+        #expect(exact.results.first?.matchQuality == "exact")
+        #expect(!exact.results.contains { $0.record.isDeprecated })
+        #expect(exact.intent?.kind == .symbol)
 
-        let usrHits = try CorpusSearchEngine.search(
-            CorpusSearchRequest(query: "s:7SwiftUI15NavigationStackV"),
+        let ios15 = try CorpusSearch.search(
+            SearchOptions(query: "navigation", minimumVersions: ["ios": "15.0"]),
             on: store.connection
         )
-        #expect(usrHits.count == 1)
-        #expect(usrHits[0].confidence == .exact)
+        #expect(ios15.results.map(\.path) == ["swiftui/navigationview"])
 
-        let ios15Hits = try CorpusSearchEngine.search(
-            CorpusSearchRequest(query: "navigation", minVersions: PlatformAvailability(ios: "15.0")),
-            on: store.connection
-        )
-        #expect(ios15Hits.map(\.document.key.rawValue) == ["swiftui/navigationview"])
-
-        let bodyHits = try CorpusSearchEngine.search(
-            CorpusSearchRequest(query: "breadcrumbs"),
-            on: store.connection
-        )
-        #expect(bodyHits.map(\.document.key.rawValue) == ["swiftui/navigationstack"])
-        #expect(bodyHits.first?.confidence == .approximate)
+        let body = try CorpusSearch.search(SearchOptions(query: "breadcrumbs"), on: store.connection)
+        #expect(body.results.map(\.path) == ["swiftui/navigationstack"])
+        #expect(body.results.first?.matchQuality == "body")
+        #expect(body.results.first?.snippet?.contains("breadcrumbs") == true)
+        #expect(body.bodyIndexAvailable)
     }
 
-    /// libFuzzer crash-e6acfcd0 (`FuzzFTSQuery`): explicit FTS5 syntax with an unbalanced quote.
-    @Test func `malformed explicit FTS5 syntax degrades to word search instead of failing`() throws {
-        // libFuzzer crash-dafee046: `"` fused with a combining mark (U+07FD) was escaped grapheme-wise.
+    @Test func `relaxes long queries that match nothing and ranks typos through the fuzzy tier`() throws {
+        let store = try seedNavigationCorpus()
+        defer { store.close() }
+        let relaxed = try CorpusSearch.search(
+            SearchOptions(query: "how should I use the NavigationStack thing zzqx"),
+            on: store.connection
+        )
+        #expect(relaxed.relaxationTier == "pruned-or")
+        #expect(relaxed.results.first?.path == "swiftui/navigationstack")
+
+        // `NavigationStak` FTS-matches NavigationView on the CamelCase sub-word `navigation`; with fewer than 5
+        // hits, the fuzzy tier adds NavigationStack (edit distance 1), ranked below the lexical match (as in Bun).
+        let typo = try CorpusSearch.search(SearchOptions(query: "NavigationStak"), on: store.connection)
+        #expect(typo.results.map(\.path) == ["swiftui/navigationview", "swiftui/navigationstack"])
+        #expect(typo.results.last?.matchQuality == "fuzzy")
+        #expect(typo.results.last?.distance == 1)
+    }
+
+    @Test func `detects Bun intents and sorts like JavaScriptCore`() {
+        // Expected values produced by Bun's `detectIntent` (src/search/intent.js).
+        let expected: [(String, SearchIntent.Kind, Double)] = [
+            ("NavigationStack", .symbol, 0.9), ("View.body", .symbol, 0.9), ("how to present a sheet", .howto, 0.8),
+            ("app crashes on launch", .general, 0.5), ("app crash on launch", .error, 0.8),
+            ("what is a scene", .concept, 0.7), ("wwdc 2023 sessions", .wwdc, 0.8), ("layout", .general, 0.5),
+            ("Foo::bar", .symbol, 0.9), ("URLSession", .symbol, 0.7), ("difference  between x", .concept, 0.7),
+            ("vs. other", .concept, 0.7), ("UIView", .symbol, 0.7)
+        ]
+        for (query, kind, confidence) in expected {
+            #expect(SearchIntent.detect(query) == SearchIntent(kind: kind, confidence: confidence), "\(query)")
+        }
+        // A comparator that is not a strict weak ordering (Bun's 0.001 score tolerance) still sorts stably.
+        let sorted = JSArraySort.sorted([3.0005, 3.0, 2.0, 3.0009]) { abs($1 - $0) > 0.001 ? $1 - $0 : 0 }
+        #expect(sorted == [3.0005, 3.0, 3.0009, 2.0])
+    }
+
+    /// libFuzzer crash-e6acfcd0 / dafee046 (`FuzzFTSQuery`): explicit or hostile syntax never fails the search.
+    @Test func `malformed explicit FTS5 syntax falls back instead of failing`() throws {
         let inputs = [
             #"Naviga;ignSta path" OR NOT x* (y)"#, "\u{0742}\u{FFFD}v\u{FFFD}J", "\u{FFFD}if:\":\"\"\u{07FD}::",
             "a \"\u{0301}b"
         ]
         for input in inputs {
-            let lexical = FTSQueryBuilder.buildLexicalQuery(input)
             let trigram = FTSQueryBuilder.sanitizeTrigramQuery(input)
-            #expect(lexical.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0, "\(lexical)")
             #expect(trigram.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0, "\(trigram)")
         }
         let store = try seedNavigationCorpus()
         defer { store.close() }
-        for query in [#"Navigation "path OR x*"#, "NavigationStack AND (", "NOT NOT", #"""""#] {
-            let hits = try CorpusSearchEngine.search(CorpusSearchRequest(query: query), on: store.connection)
-            if query.hasPrefix("NavigationStack") { #expect(!hits.isEmpty, "\(query)") }
+        for query in [#"NavigationStack "path OR x*"#, "NavigationStack AND (", "NOT NOT", #"""""#] + inputs {
+            _ = try CorpusSearch.search(SearchOptions(query: query), on: store.connection)
         }
+        // Rejected explicit syntax retries as one quoted prefix phrase (Bun `runFts` fallback).
+        let phrase = try CorpusSearch.search(SearchOptions(query: #""NavigationStack"#), on: store.connection)
+        #expect(phrase.results.first?.path == "swiftui/navigationstack")
     }
 
     @Test func `indexes symbols in AemiSearch SymbolMemoryIndex with typo expansion and snapshot round-trip`() throws {
@@ -100,40 +130,6 @@ struct CorpusSearchEngineTests {
         #expect(restored.count == 2)
         let restoredHits = restored.search("NavigationController", framework: "uikit", limit: 5)
         #expect(restoredHits.first?.key.rawValue == "uikit/uinavigationcontroller")
-    }
-
-    @Test func `fuses ranked lists via HybridRankFusion and shortlists binary vectors accurately`() {
-        let fused = HybridRankFusion.fuse([
-            HybridRankFusion.RankedList(keys: ["a", "b"], weight: 1.0, scores: ["a": 10.0, "b": 4.0]),
-            HybridRankFusion.RankedList(keys: ["b", "c"], weight: 0.6, scores: ["b": 0.9, "c": 0.8])
-        ])
-        #expect((fused["a"] ?? 0) > (fused["c"] ?? 0))
-        #expect((fused["b"] ?? 0) > (fused["c"] ?? 0))
-
-        let q = BinaryVectorScorer.quantizeBinary([1, -1, 1, -1, 1, -1, 1, -1])
-        let exact = BinaryVectorScorer.quantizeBinary([1, -1, 1, -1, 1, -1, 1, -1])
-        let opposite = BinaryVectorScorer.quantizeBinary([-1, 1, -1, 1, -1, 1, -1, 1])
-        let near = BinaryVectorScorer.quantizeBinary([1, -1, 1, -1, 1, -1, 1, 1])
-
-        let top2 = BinaryVectorScorer.shortlist(
-            query: q,
-            packedCodes: opposite + near + exact,
-            codeByteWidth: 1,
-            topK: 2
-        )
-        #expect(top2.map(\.index) == [2, 1])
-        #expect(top2.map(\.distance) == [0, 1])
-
-        let scaleBits = Float(0.5).bitPattern
-        let payload: [UInt8] = [
-            UInt8(bitPattern: Int8(10)),
-            UInt8(bitPattern: Int8(-20)),
-            UInt8(truncatingIfNeeded: scaleBits),
-            UInt8(truncatingIfNeeded: scaleBits >> 8),
-            UInt8(truncatingIfNeeded: scaleBits >> 16),
-            UInt8(truncatingIfNeeded: scaleBits >> 24)
-        ]
-        #expect(BinaryVectorScorer.dotInt8(query: [2.0, -1.0], quantizedPayload: payload) == 20.0)
     }
 
     private func seedNavigationCorpus() throws -> CorpusStore {

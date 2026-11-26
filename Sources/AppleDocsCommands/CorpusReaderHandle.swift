@@ -5,9 +5,9 @@ import Foundation
 
 /// Shared pooled read-only corpus handle used by both `AppleDocsMCP` and `AppleDocsWeb`.
 ///
-/// Owns a bounded ``SQLiteReaderPool`` and lazily loads optional semantic search resources
-/// (``Model2VecEmbedder`` + ``SemanticCorpusIndex``) when a local model directory and
-/// `document_vectors` table are present, degrading cleanly to lexical-only search otherwise.
+/// Owns a bounded ``SQLiteReaderPool`` and lazily loads the optional semantic tier (``Model2VecEmbedder`` +
+/// ``ChunkVectorStore``) when a local model directory and corpus vectors are present (and
+/// `APPLE_DOCS_SEMANTIC` is not `off`), degrading cleanly to lexical-only search otherwise.
 public final class CorpusReaderHandle: Sendable {
     public let databasePath: String
     public let resourcesDirectory: String
@@ -44,8 +44,8 @@ public final class CorpusReaderHandle: Sendable {
         }
     }
 
-    /// Returns lazily loaded `(Model2VecEmbedder, SemanticCorpusIndex)` if available on disk, else `nil`.
-    public func semanticResources() async -> (embedder: Model2VecEmbedder, index: SemanticCorpusIndex)? {
+    /// The semantic tier's inputs, loaded once on first use; `nil` when unavailable.
+    public func semanticResources() async -> CorpusSearch.Semantic? {
         await semanticLoader.loadIfAvailable()
     }
 
@@ -59,16 +59,17 @@ private actor SemanticStateActor {
     private let databasePath: String
     private let resourcesDirectory: String
     private var attempted = false
-    private var loaded: (embedder: Model2VecEmbedder, index: SemanticCorpusIndex)?
+    private var loaded: CorpusSearch.Semantic?
 
     init(databasePath: String, resourcesDirectory: String) {
         self.databasePath = databasePath
         self.resourcesDirectory = resourcesDirectory
     }
 
-    func loadIfAvailable() -> (embedder: Model2VecEmbedder, index: SemanticCorpusIndex)? {
+    func loadIfAvailable() -> CorpusSearch.Semantic? {
         if attempted { return loaded }
         attempted = true
+        if ProcessInfo.processInfo.environment["APPLE_DOCS_SEMANTIC"] == "off" { return nil }
         let modelDir = URL(fileURLWithPath: resourcesDirectory, isDirectory: true)
             .appendingPathComponent("models/minishlab/potion-retrieval-32M", isDirectory: true)
             .path
@@ -81,10 +82,8 @@ private actor SemanticStateActor {
             return nil
         }
         defer { conn.close() }
-        guard let index = try? SemanticCorpusIndex.load(from: conn), !index.documentIDs.isEmpty else {
-            return nil
-        }
-        loaded = (embedder, index)
+        guard let store = (try? ChunkVectorStore.load(from: conn)) ?? nil else { return nil }
+        loaded = CorpusSearch.Semantic(embed: { embedder.embed($0) }, store: store)
         return loaded
     }
 }

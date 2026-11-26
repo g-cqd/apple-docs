@@ -26,8 +26,21 @@ public enum CorpusSchemaV1: Sendable {
 
     /// Indexes added to v1 after its first release (idempotent DDL).
     static let addedIndexes = [
-        "CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);"
+        "CREATE INDEX IF NOT EXISTS idx_crawl_root_status_path ON crawl_state(root_slug, status, path);",
+        """
+        CREATE TABLE IF NOT EXISTS framework_synonyms (
+            canonical TEXT NOT NULL, alias TEXT NOT NULL UNIQUE, PRIMARY KEY (canonical, alias)
+        );
+        """,
+        "CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram_vocab USING fts5vocab(documents_trigram, 'row');"
     ]
+
+    /// Whether `documents_body_fts` predates the contentless (Bun-compatible) definition and must be rebuilt.
+    static func bodyIndexNeedsRebuild(on connection: SQLiteConnection) throws(SQLiteError) -> Bool {
+        let row = try connection.queryOne("SELECT sql FROM sqlite_master WHERE name = 'documents_body_fts'")
+        guard let sql = try row?.optionalText(at: 0) else { return false }
+        return !sql.contains("content=''")
+    }
 
     /// Adds ``addedColumns`` and ``addedIndexes`` missing from an existing v1 database (every read-write open).
     static func addMissingColumns(on connection: SQLiteConnection) throws(SQLiteError) {

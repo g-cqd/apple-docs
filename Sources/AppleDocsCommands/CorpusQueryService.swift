@@ -22,18 +22,39 @@ public enum CorpusQueryService: Sendable {
     /// and projects hits through ``PublicSearchResult``.
     public static func search(
         _ request: CorpusSearchRequest,
-        semantic: (embedder: Model2VecEmbedder, index: SemanticCorpusIndex)? = nil,
+        semantic: CorpusSearch.Semantic? = nil,
         on connection: SQLiteConnection
     ) throws(SQLiteError) -> [PublicSearchResult] {
-        let hits: [CorpusSearchHit] =
-            if let semantic {
-                try semantic.index.hybridSearch(request, embedder: semantic.embedder, on: connection)
-            } else {
-                try CorpusSearchEngine.search(request, on: connection)
-            }
-        return hits.map { hit in
-            PublicSearchResult(document: hit.document, confidence: hit.confidence.rawValue)
+        var minimums: [String: String] = [:]
+        let versions = request.minVersions
+        for (key, value) in [
+            ("ios", versions.ios), ("macos", versions.macos), ("watchos", versions.watchos), ("tvos", versions.tvos),
+            ("visionos", versions.visionos)
+        ] {
+            if let value { minimums[key] = value }
         }
+        let options = SearchOptions(
+            query: request.query,
+            framework: request.framework,
+            source: request.sources.isEmpty ? nil : request.sources.map(\.rawValue).joined(separator: ","),
+            kind: request.kind,
+            language: request.language,
+            minimumVersions: minimums,
+            limit: request.limit,
+            deprecated: request.deprecated.rawValue
+        )
+        let outcome = try CorpusSearch.search(options, semantic: semantic, on: connection)
+        let store = CorpusStore(borrowing: connection)
+        var results: [PublicSearchResult] = []
+        for item in outcome.results {
+            guard let key = try? DocumentKey(item.path), let document = try store.document(forKey: key) else {
+                continue
+            }
+            results.append(
+                PublicSearchResult(document: document, confidence: MCPPayloadProjection.confidence(item.matchQuality))
+            )
+        }
+        return results
     }
 
     /// Parses a comma-separated source slug string (e.g. `"apple-docc,hig,wwdc"`) into typed ``SourceKind`` values.

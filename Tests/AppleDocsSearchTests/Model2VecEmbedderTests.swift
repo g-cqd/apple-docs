@@ -1,10 +1,11 @@
 import AemiProtobuf
 import AemiSearch
 import AppleDocsCore
-import AppleDocsSearch
 import AppleDocsStorage
 import Foundation
 import Testing
+
+@testable import AppleDocsSearch
 
 @Suite("Model2VecEmbedder & WordPieceTokenizer")
 struct Model2VecEmbedderTests {
@@ -109,30 +110,61 @@ struct Model2VecEmbedderTests {
         #expect(simRelated > simUnrelated)
     }
 
-    @Test func `SemanticCorpusIndex loads binary vectors and fuses lexical with semantic hits`() throws {
+    @Test func `chunk vectors shortlist by Hamming, rescore with int8, and keep each document's best chunk`() throws {
         let store = try CorpusStore(path: ":memory:")
+        defer { store.close() }
         let id1 = try store.upsertDocument(
             DocumentRecord(key: try DocumentKey("swiftui/view"), title: "View", framework: "swiftui")
         )
         let id2 = try store.upsertDocument(
             DocumentRecord(key: try DocumentKey("metal/mtlbuffer"), title: "MTLBuffer", framework: "metal")
         )
+        let query: [Float] = [0.5, 0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5]
+        func int8(_ values: [Int8], scale: Float) -> [UInt8] {
+            values.map { UInt8(bitPattern: $0) } + withUnsafeBytes(of: scale.bitPattern.littleEndian, Array.init)
+        }
+        struct Chunk {
+            let document: Int64
+            let ord: Int64
+            let vector: [Float]
+            let quantized: [Int8]
+        }
+        let chunks = [
+            Chunk(
+                document: id1,
+                ord: 0,
+                vector: [1, 1, 1, 1, -1, -1, -1, -1],
+                quantized: [100, 100, 100, 100, -100, -100, -100, -100]
+            ),
+            Chunk(
+                document: id1,
+                ord: 1,
+                vector: [1, 1, -1, -1, 1, 1, -1, -1],
+                quantized: [10, 10, -10, -10, 10, 10, -10, -10]
+            ),
+            Chunk(
+                document: id2,
+                ord: 0,
+                vector: [-1, -1, -1, -1, 1, 1, 1, 1],
+                quantized: [-100, -100, -100, -100, 100, 100, 100, 100]
+            )
+        ]
+        for chunk in chunks {
+            try store.connection.execute(
+                "INSERT INTO document_chunks (document_id, ord, vec_bin, vec_i8) VALUES (?, ?, ?, ?)",
+                bindings: [
+                    .integer(chunk.document), .integer(chunk.ord),
+                    .blob(SemanticCandidates.quantize(chunk.vector, dimensions: 8)),
+                    .blob(int8(chunk.quantized, scale: 0.01))
+                ]
+            )
+        }
+        let vectors = try #require(try ChunkVectorStore.load(from: store.connection))
+        #expect(vectors.mode == .chunk && vectors.count == 3 && vectors.dimensions == 8)
 
-        let v1: [Float] = [1, 1, 1, 1, -1, -1, -1, -1]
-        let v2: [Float] = [-1, -1, -1, -1, 1, 1, 1, 1]
-        try store.connection.execute(
-            "INSERT INTO document_vectors (document_id, vec) VALUES (?, ?)",
-            bindings: [.integer(id1), .blob(BinaryVectorScorer.quantizeBinary(v1))]
-        )
-        try store.connection.execute(
-            "INSERT INTO document_vectors (document_id, vec) VALUES (?, ?)",
-            bindings: [.integer(id2), .blob(BinaryVectorScorer.quantizeBinary(v2))]
-        )
-
-        let index = try SemanticCorpusIndex.load(from: store.connection)
-        let shortlist = index.shortlist(for: v2, topK: 1)
-        #expect(shortlist.count == 1)
-        #expect(shortlist[0].documentID == id2)
-        #expect(shortlist[0].similarity == 1.0)
+        let candidates = SemanticCandidates.candidates(query: query, store: vectors, topK: 5, on: store.connection)
+        #expect(candidates.map(\.documentID) == [id1, id2])
+        #expect(abs(candidates[0].score - 4.0) < 1e-6)  // Σ |0.5·100| over 8 dims · scale 0.01
+        #expect(candidates[0].distance == 0)
     }
 }

@@ -42,6 +42,7 @@ public struct DocumentRecord: Hashable, Sendable, Codable {
         isDeprecated: Bool = false,
         isBeta: Bool = false,
         isReleaseNotes: Bool = false,
+        // @dl:accept -- defaulted parameter list (shape shared with SearchOptions)
         urlDepth: Int = 0,
         sourceMetadataJSON: String? = nil,
         contentHash: String? = nil

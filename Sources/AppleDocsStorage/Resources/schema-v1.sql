@@ -119,9 +119,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram USING fts5(
     tokenize='trigram case_sensitive 0'
 );
 
+CREATE VIRTUAL TABLE IF NOT EXISTS documents_trigram_vocab USING fts5vocab(documents_trigram, 'row');
+
+CREATE TABLE IF NOT EXISTS framework_synonyms (
+    canonical TEXT NOT NULL,
+    alias     TEXT NOT NULL UNIQUE,
+    PRIMARY KEY (canonical, alias)
+);
+
+-- Contentless like Bun's (body text = renderPlainText of the document and its sections), so imported Bun
+-- indexes can be copied shadow table for shadow table.
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_body_fts USING fts5(
-    body,
-    tokenize='porter unicode61'
+    body, content='', contentless_delete=1, tokenize='porter unicode61'
 );
 
 CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN

@@ -1,4 +1,5 @@
 import AemiJSONCore
+import AppleDocsCore
 import Foundation
 
 /// Pure-Swift BERT WordPiece tokenizer matching HuggingFace `tokenizer.json` shipped with
@@ -157,7 +158,7 @@ public struct WordPieceTokenizer: Sendable {
 
     private static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
         let v = scalar.value
-        return v == 0x20 || v == 0x09 || v == 0x0A || v == 0x0D || scalar.properties.isWhitespace
+        return v == 0x20 || v == 0x09 || v == 0x0A || v == 0x0D || DocumentPlainText.isJSWhitespace(scalar)
     }
 
     private static func isControl(_ scalar: Unicode.Scalar) -> Bool {

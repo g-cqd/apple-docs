@@ -1,142 +1,90 @@
 import AppleDocsCore
 
-/// Builds safe SQLite FTS5 `MATCH` expressions from user queries.
+/// Bun's FTS5 `MATCH` builders (`search/fts-query-builder.js`).
 ///
-/// - Splits qualified Swift/Obj-C identifiers on `.`, `_`, `:`, `/`, `\` into OR'd prefix terms
-///   plus their concatenated form (so `AVAudioSession.RouteSelection` matches both segments and
-///   concatenated tokens).
-/// - Splits CamelCase words into exact sub-word alternatives alongside the whole-word prefix.
-/// - Escapes double quotes safely and produces `""` on empty input so FTS5 never raises a syntax error.
+/// - Queries containing a `"` or a bare `AND`/`OR`/`NOT` are explicit FTS5 syntax and pass through verbatim (the
+///   search cascade falls back to a quoted prefix phrase when SQLite rejects them).
+/// - Otherwise each whitespace-separated word becomes a prefix term, split on `.`, `_`, `:`, `/`, `\` with the
+///   concatenated form added, plus exact CamelCase sub-words: `AVAudioSession.RouteSelection` matches either
+///   segment or the joined token.
 public enum FTSQueryBuilder: Sendable {
-    /// Trims leading and trailing whitespace characters without Foundation overhead.
-    public static func trimWhitespace(_ value: String) -> String {
-        var start = value.startIndex
-        while start < value.endIndex, value[start].isWhitespace {
-            start = value.index(after: start)
-        }
-        var end = value.endIndex
-        while end > start {
-            let before = value.index(before: end)
-            guard value[before].isWhitespace else { break }
-            end = before
-        }
-        return String(value[start ..< end])
-    }
-
-    /// Builds a Porter/Unicode61 FTS5 `MATCH` expression for `query`.
+    /// `buildFtsQuery(q)` for the trimmed query.
     public static func buildLexicalQuery(_ query: String) -> String {
-        let trimmed = trimWhitespace(query)
-        guard !trimmed.isEmpty else { return "\"\"" }
-        // Explicit FTS5 syntax passes through (Bun parity) only when its quotes balance; otherwise the quotes are
-        // dropped and the text is treated as plain words, so user input can never leave a string unterminated.
-        if containsExplicitOperators(trimmed), trimmed.utf8.count(where: { $0 == UInt8(ascii: "\"") }) % 2 == 0 {
-            return trimmed
-        }
-        return plainWordsQuery(trimmed.replacingScalars("\"", with: " "))
-    }
-
-    /// The word-group query for `text`, ignoring any FTS5 syntax it contains (the engine's fallback when explicit
-    /// syntax is rejected by SQLite).
-    public static func plainWordsQuery(_ text: String) -> String {
-        let operators: Set<Substring> = ["AND", "OR", "NOT"]
-        let tokens: [Substring] = text.replacingScalars("\"", with: " ")
-            .split { (character: Character) -> Bool in
-                character.isWhitespace
+        let trimmed = DocumentPlainText.trim(query)
+        if hasExplicitOperator(trimmed) || trimmed.containsScalar("\"") { return trimmed }
+        var words: [String] = []
+        var current = String.UnicodeScalarView()
+        for scalar in trimmed.unicodeScalars {
+            if DocumentPlainText.isJSWhitespace(scalar) {
+                if !current.isEmpty { words.append(String(current)) }
+                current = String.UnicodeScalarView()
+            } else {
+                current.append(scalar)
             }
-        let words: [String] = tokens.filter { !operators.contains($0) }.map(String.init)
-        let groups = words.compactMap(buildWordGroup)
+        }
+        if !current.isEmpty { words.append(String(current)) }
+        let groups = words.compactMap(wordGroup)
         return groups.isEmpty ? "\"\"" : groups.joined(separator: " ")
     }
 
-    /// Sanitizes a query string for an FTS5 trigram `MATCH` clause.
+    /// `sanitizeTrigramQuery(q)`: `[\w\s]+` passes through; anything else becomes one quoted phrase.
     public static func sanitizeTrigramQuery(_ query: String) -> String {
-        let trimmed = trimWhitespace(query)
+        let trimmed = DocumentPlainText.trim(query)
         guard !trimmed.isEmpty else { return "\"\"" }
-        let isPlain = trimmed.unicodeScalars.allSatisfy { scalar in
-            CharacterSetCheck.isWordOrSpace(scalar)
+        if trimmed.unicodeScalars.allSatisfy({ ASCIIWords.isWord($0) || DocumentPlainText.isJSWhitespace($0) }) {
+            return trimmed
         }
-        if isPlain { return trimmed }
-        let escaped = trimmed.replacingScalars("\"", with: "\"\"")
-        return "\"\(escaped)\""
+        return "\"" + trimmed.replacingScalars("\"", with: "\"\"") + "\""
     }
 
-    private static func containsExplicitOperators(_ query: String) -> Bool {
-        if query.containsScalar("\"") { return true }
-        let tokens = query.split(whereSeparator: { $0.isWhitespace })
-        return tokens.contains { $0 == "AND" || $0 == "OR" || $0 == "NOT" }
+    /// `/\b(AND|OR|NOT)\b/` over ASCII word runs.
+    private static func hasExplicitOperator(_ query: String) -> Bool {
+        ASCIIWords.runs(query).contains { $0.word == "AND" || $0.word == "OR" || $0.word == "NOT" }
     }
 
-    private static func buildWordGroup(_ word: String) -> String? {
-        let separators: Set<Character> = [".", "_", ":", "/", "\\"]
-        // Only segments the unicode61 tokenizer turns into tokens: a punctuation-only prefix term (`"("*`) is an
-        // FTS5 syntax error.
-        let segments = word.split(whereSeparator: { separators.contains($0) }).map(String.init)
-            .filter { $0.contains { $0.isLetter || $0.isNumber } }
+    /// `buildWordGroup(word)`.
+    private static func wordGroup(_ word: String) -> String? {
+        let separators: Set<Unicode.Scalar> = [".", "_", ":", "/", "\\"]
+        let segments = word.unicodeScalars.split(whereSeparator: separators.contains)
+            .map { String(String.UnicodeScalarView($0)) }
         guard !segments.isEmpty else { return nil }
-
         var prefixTerms: [String] = []
-        var seenPrefix: Set<String> = []
         var exactTerms: [String] = []
-        var seenExact: Set<String> = []
-
         for segment in segments {
             let lower = segment.lowercased()
-            if seenPrefix.insert(lower).inserted {
-                prefixTerms.append(lower)
-            }
+            if !prefixTerms.contains(lower) { prefixTerms.append(lower) }
             for subword in camelSubwords(segment) {
                 let subLower = subword.lowercased()
-                if seenExact.insert(subLower).inserted {
-                    exactTerms.append(subLower)
-                }
+                if !exactTerms.contains(subLower) { exactTerms.append(subLower) }
             }
         }
-
         if segments.count > 1 {
             let joined = segments.joined().lowercased()
-            if seenPrefix.insert(joined).inserted {
-                prefixTerms.append(joined)
-            }
+            if !prefixTerms.contains(joined) { prefixTerms.append(joined) }
         }
-
-        let filteredExact = exactTerms.filter { !seenPrefix.contains($0) }
-        let alternatives =
-            prefixTerms.map { "\"\(escapeFTS($0))\"*" } + filteredExact.map { "\"\(escapeFTS($0))\"" }
+        exactTerms.removeAll { prefixTerms.contains($0) }
+        let alternatives = prefixTerms.map { "\"\($0)\"*" } + exactTerms.map { "\"\($0)\"" }
         guard !alternatives.isEmpty else { return nil }
-        if alternatives.count == 1 { return alternatives[0] }
-        return "(\(alternatives.joined(separator: " OR ")))"
+        return alternatives.count == 1 ? alternatives[0] : "(" + alternatives.joined(separator: " OR ") + ")"
     }
 
+    /// `s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' ')`, kept only when it splits.
     private static func camelSubwords(_ token: String) -> [String] {
         var parts: [String] = []
-        var current = ""
-        var previousWasLowerOrDigit = false
-        for character in token {
-            let isUpper = character.isASCII && character.isUppercase
-            if isUpper, previousWasLowerOrDigit, !current.isEmpty {
-                parts.append(current)
-                current = ""
+        var current = String.UnicodeScalarView()
+        var previousLowerOrDigit = false
+        for scalar in token.unicodeScalars {
+            if ASCIIWords.isUpper(scalar), previousLowerOrDigit, !current.isEmpty {
+                parts.append(String(current))
+                current = String.UnicodeScalarView()
+                previousLowerOrDigit = false
+                current.append(scalar)
+                continue
             }
-            current.append(character)
-            previousWasLowerOrDigit = character.isASCII && (character.isLowercase || character.isNumber)
+            current.append(scalar)
+            previousLowerOrDigit = ASCIIWords.isLower(scalar) || (0x30 ... 0x39).contains(scalar.value)
         }
-        if !current.isEmpty { parts.append(current) }
+        if !current.isEmpty { parts.append(String(current)) }
         return parts.count > 1 ? parts : []
-    }
-
-    private static func escapeFTS(_ token: String) -> String {
-        token.replacingScalars("\"", with: "\"\"")
-    }
-}
-
-private enum CharacterSetCheck {
-    static func isWordOrSpace(_ scalar: Unicode.Scalar) -> Bool {
-        let value = scalar.value
-        let isAlphaNum =
-            (value >= 0x30 && value <= 0x39)
-            || (value >= 0x41 && value <= 0x5A)
-            || (value >= 0x61 && value <= 0x7A)
-            || value == 0x5F
-        return isAlphaNum || value == 0x20 || value == 0x09
     }
 }

@@ -1,4 +1,5 @@
 import AemiJSONCore
+import AppleDocsCore
 
 /// Plain-text rendering of DocC block and inline nodes — a byte-compatible port of Bun's
 /// `normalize/render-content.js` (`renderContentNodesToText`, `renderInlineNodes`). This is what both
@@ -104,22 +105,6 @@ enum DocCPlainText {
         }
     }
 
-    /// JavaScript `String.prototype.trim()` over ASCII/Unicode whitespace.
-    static func trimmed(_ text: String) -> String {
-        // Scalar-level scan: `Character` iteration from the end is quadratic-ish on long strings.
-        let scalars = text.unicodeScalars
-        guard let first = scalars.firstIndex(where: { !isJSWhitespace($0) }) else { return "" }
-        let last = scalars.lastIndex(where: { !isJSWhitespace($0) }) ?? first
-        if first == scalars.startIndex, scalars.index(after: last) == scalars.endIndex { return text }
-        return String(scalars[first ... last])
-    }
-
-    /// JavaScript `\s` (WhiteSpace + LineTerminator).
-    static func isJSWhitespace(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.value {
-            case 0x09 ... 0x0D, 0x20, 0xA0, 0x1680, 0x2000 ... 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
-                true
-            default: false
-        }
-    }
+    /// JavaScript `String.prototype.trim()` (shared with the body index).
+    static func trimmed(_ text: String) -> String { DocumentPlainText.trim(text) }
 }

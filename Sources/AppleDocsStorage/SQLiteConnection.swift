@@ -53,6 +53,17 @@ public final class SQLiteConnection {
         return opened
     }
 
+    /// Runs `body` with SQLite's defensive mode off (Apple's SQLite enables it by default), which is what allows
+    /// writing FTS5 shadow tables directly — used only to copy a trusted Bun index verbatim during import.
+    public func withShadowTableWrites<T>(_ body: () throws -> T) throws -> T {
+        guard let db = handle else { throw SQLiteError.closed }
+        var previous: Int32 = 0
+        _ = unsafe apple_docs_sqlite3_db_config_flag(db, SQLITE_DBCONFIG_DEFENSIVE, -1, &previous)
+        _ = unsafe apple_docs_sqlite3_db_config_flag(db, SQLITE_DBCONFIG_DEFENSIVE, 0, nil)
+        defer { _ = unsafe apple_docs_sqlite3_db_config_flag(db, SQLITE_DBCONFIG_DEFENSIVE, previous, nil) }
+        return try body()
+    }
+
     /// Keeps `-wal`/`-shm` on disk when the last writer closes, so read-only deployments (read-only mounts,
     /// other users) can still open the corpus.
     private func persistWAL() {
@@ -100,6 +111,18 @@ public final class SQLiteConnection {
     public func query(_ sql: String, bindings: [SQLiteValue] = []) throws(SQLiteError) -> [SQLiteRow] {
         let stmt = try cachedStatement(for: sql)
         try stmt.bind(bindings)
+        return try stmt.queryAll()
+    }
+
+    /// `?, ?, …` for an `IN (…)` list of `count` bound values.
+    public static func placeholders(_ count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ",")
+    }
+
+    /// Queries all rows of a statement using named parameters (`$name`); every declared parameter must be bound.
+    public func query(_ sql: String, named bindings: [String: SQLiteValue]) throws(SQLiteError) -> [SQLiteRow] {
+        let stmt = try cachedStatement(for: sql)
+        try stmt.bind(named: bindings)
         return try stmt.queryAll()
     }
 
