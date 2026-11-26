@@ -1,6 +1,9 @@
 import CAppleDocsZstd
 
-/// Transparent Zstandard (`zstd`) codec for compressed corpus section & raw payload blobs.
+/// Transparent Zstandard (`zstd`) decoder for compressed corpus section & raw payload blobs.
+///
+/// Backed by the vendored single-file zstd decoder (`CAppleDocsZstd`, upstream v1.5.7) compiled into the binary,
+/// so releases carry no dynamic `libzstd` dependency on macOS or Linux. Only decompression is needed at runtime.
 ///
 /// Mirrors the Bun `section-codec.js` wire convention: blobs beginning with the 4-byte Zstd frame
 /// magic (`28 B5 2F FD`) are decompressed with an explicit maximum output cap (`maxDecodedBytes`)
@@ -16,17 +19,6 @@ public enum ZstdCodec: Sendable {
             && bytes[1] == 0xB5
             && bytes[2] == 0x2F
             && bytes[3] == 0xFD
-    }
-
-    /// Compresses `bytes` with Zstandard at `level` (default `3`).
-    public static func compress(_ bytes: [UInt8], level: Int32 = 3) throws(SQLiteError) -> [UInt8] {
-        try runBufferTransform(
-            input: bytes,
-            outputCapacity: ZSTD_compressBound(bytes.count),
-            label: "compression"
-        ) { dst, src in
-            unsafe ZSTD_compress(dst.baseAddress, dst.count, src.baseAddress, src.count, level)
-        }
     }
 
     /// Decompresses a Zstandard frame with a strict output cap (`maxDecodedBytes`).

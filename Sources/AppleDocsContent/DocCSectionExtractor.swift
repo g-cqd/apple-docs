@@ -170,9 +170,10 @@ enum DocCSectionExtractor {
         for group in items {
             let titles = (group["identifiers"].array ?? []).compactMap(\.string)
                 .map { "- \(DocCContentRenderer.referenceTitle($0, refs: refs))" }
-            guard !titles.isEmpty else { continue }
-            let title = group["title"].string.map { "#### \($0)\n" } ?? ""
-            blocks.append(title + titles.joined(separator: "\n"))
+            // Bun keeps a titled group even when it lists no identifiers (e.g. generated See Also groups).
+            let lines = (group["title"].string.map { ["#### \($0)"] } ?? []) + titles
+            guard !lines.isEmpty else { continue }
+            blocks.append(lines.joined(separator: "\n"))
         }
         result.append(kind: kind, heading: heading, text: blocks.joined(separator: "\n\n"))
     }

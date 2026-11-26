@@ -53,11 +53,10 @@ let package = Package(
     ],
     targets: [
         .systemLibrary(name: "CSQLite", path: "Sources/CSQLite", providers: [.apt(["libsqlite3-dev"])]),
-        .systemLibrary(
+        .target(
             name: "CAppleDocsZstd",
             path: "Sources/CAppleDocsZstd",
-            pkgConfig: "libzstd",
-            providers: [.apt(["libzstd-dev"]), .brew(["zstd"])]
+            exclude: ["LICENSE", "VENDORED.md"]
         ),
         .target(
             name: "AppleDocsCore",

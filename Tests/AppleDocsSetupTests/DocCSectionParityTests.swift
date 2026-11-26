@@ -98,4 +98,14 @@ struct DocCSectionParityTests {
         let converted = try DocCJSONConverter.convert(json: Array(json.utf8), key: try DocumentKey("kit"))
         #expect(converted.discoveredKeys.map(\.rawValue) == ["kit/live"])
     }
+
+    @Test func `keeps titled link groups that have no identifiers (Bun parity, CoreML regression)`() throws {
+        let json = """
+            {"metadata": {"title": "Guide"},
+             "seeAlsoSections": [{"anchor": "Optimization", "generated": true, "identifiers": [], "title": "Optimization"}]}
+            """
+        let converted = try DocCJSONConverter.convert(json: Array(json.utf8), key: try DocumentKey("coreml/guide"))
+        let seeAlso = converted.sections.first { $0.sectionKind == "see_also" }
+        #expect(seeAlso?.contentText == "#### Optimization")
+    }
 }
