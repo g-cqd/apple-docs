@@ -208,7 +208,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AppleDocsSearchTests",
-            dependencies: ["AppleDocsCore", "AppleDocsSearch", "AppleDocsStorage", "AppleDocsTestSupport"],
+            dependencies: [
+                "AppleDocsCore", "AppleDocsSearch", "AppleDocsStorage", "AppleDocsTestSupport",
+                .product(name: "AemiProtobuf", package: "AemiProtobuf")
+            ],
             path: "Tests/AppleDocsSearchTests",
             swiftSettings: strictSettings
         ),
