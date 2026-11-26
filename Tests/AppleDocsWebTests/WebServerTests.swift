@@ -54,6 +54,31 @@ struct WebServerTests {
         #expect(post.head.status == .methodNotAllowed)
     }
 
+    @Test func `StaticSiteBuilder exports escaped HTML pages, index, discovery files, and frameworks JSON`() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("apple-docs-ssg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dbPath = tempDir.appendingPathComponent("corpus.db").path
+        let outDir = tempDir.appendingPathComponent("dist", isDirectory: true).path
+        try seedWebCorpus(at: dbPath)
+
+        let report = try StaticSiteBuilder.build(databasePath: dbPath, outputDirectory: outDir)
+        #expect(report.frameworksExported == 1)
+        #expect(report.pagesExported == 1)
+
+        let indexHTML = try String(contentsOfFile: "\(outDir)/index.html", encoding: .utf8)
+        #expect(indexHTML.contains("SwiftUI"))
+
+        let docHTML = try String(contentsOfFile: "\(outDir)/doc/swiftui/view/index.html", encoding: .utf8)
+        #expect(docHTML.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
+        #expect(!docHTML.contains("<script>alert(1)</script>"))
+
+        let robots = try String(contentsOfFile: "\(outDir)/robots.txt", encoding: .utf8)
+        #expect(robots.contains("Allow: /"))
+    }
+
     private func seedWebCorpus(at path: String) throws {
         let store = try CorpusStore(path: path, options: .readWrite)
         defer { store.close() }

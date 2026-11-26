@@ -1,4 +1,3 @@
-// @dl:accept -- ArgumentParser @Option declarations share the ParsableCommand shape across subcommands
 import AppleDocsCommands
 import AppleDocsOutput
 import AppleDocsStorage
