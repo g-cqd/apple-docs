@@ -3,11 +3,12 @@ import AemiJSONRPC
 import AppleDocsCommands
 import AppleDocsCore
 import AppleDocsOutput
+import Foundation
 import OrderedCollections
 
 extension MCPServerDispatcher {
     /// Returns the static MCP URI templates (`apple-docs://doc/{+key}`, `apple-docs://framework/{slug}`,
-    /// `apple-docs://sf-symbol/{scope}/{name}.svg`).
+    /// `apple-docs://sf-symbol/{scope}/{name}.{format}`).
     func resourceTemplatesResult() -> JSONValue {
         .object([
             "resourceTemplates": .array([
@@ -24,10 +25,12 @@ extension MCPServerDispatcher {
                     "mimeType": .string("application/json")
                 ]),
                 .object([
-                    "uriTemplate": .string("apple-docs://sf-symbol/{scope}/{name}.svg"),
+                    "uriTemplate": .string("apple-docs://sf-symbol/{scope}/{name}.{format}"),
                     "name": .string("sf-symbol"),
-                    "description": .string("Read a pre-rendered SF Symbol SVG asset."),
-                    "mimeType": .string("image/svg+xml")
+                    "description": .string(
+                        "Read or render an SF Symbol asset (format svg or png; optional ?size=&color=&background=)."
+                    ),
+                    "mimeType": .string("application/octet-stream")
                 ])
             ])
         ])
@@ -106,15 +109,49 @@ extension MCPServerDispatcher {
     }
 
     private func readSymbolResource(uri: String, tail: String) async throws -> Result<JSONValue, JSONRPCError> {
-        let parts = tail.split(separator: "/", maxSplits: 1)
-        guard parts.count == 2, parts[1].hasSuffix(".svg") else {
+        let target = tail.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+        let parts = target[0].split(separator: "/", maxSplits: 1)
+        let format = parts.count == 2 && parts[1].hasSuffix(".png") ? "png" : "svg"
+        guard parts.count == 2, parts[1].hasSuffix(".\(format)"),
+            let name = String(parts[1].dropLast(format.count + 1)).removingPercentEncoding
+        else {
             return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Invalid SF Symbol resource URI."))
         }
+        var query: [String: String] = [:]
+        for pair in (target.count > 1 ? target[1] : "").split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1)
+            if kv.count == 2 { query[String(kv[0])] = String(kv[1]).removingPercentEncoding }
+        }
         let scope = String(parts[0])
-        let name = String(parts[1].dropLast(".svg".count))
+        let size = query["size"].flatMap(Int.init) ?? 128
+        let color = query["color"] ?? query["fg"] ?? "currentColor"
+        let background = query["background"] ?? query["bg"] ?? "transparent"
         let resourcesDir = reader.resourcesDirectory
+        if format == "png" {
+            let png = try await renderPermits.withPermit {
+                try await AssetRenderService.renderSFSymbolPNG(
+                    name: name,
+                    scope: scope,
+                    size: size,
+                    color: color,
+                    background: background,
+                    resourcesDirectory: resourcesDir
+                )
+            }
+            let content: JSONValue = .object([
+                "uri": .string(uri), "mimeType": .string("image/png"), "blob": .string(Data(png).base64EncodedString())
+            ])
+            return .success(.object(["contents": .array([content])]))
+        }
         let svg = try await renderPermits.withPermit {
-            try AssetRenderService.renderSFSymbolSVG(name: name, scope: scope, resourcesDirectory: resourcesDir)
+            try AssetRenderService.renderSFSymbolSVG(
+                name: name,
+                scope: scope,
+                size: size,
+                color: color,
+                background: background,
+                resourcesDirectory: resourcesDir
+            )
         }
         return .success(resourceContent(uri: uri, mimeType: "image/svg+xml", text: svg))
     }

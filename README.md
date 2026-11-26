@@ -16,6 +16,23 @@ swift test
 python3 -B Scripts/check-layers.py && python3 -B Scripts/test-layers.py
 ```
 
+## Serving and exporting
+
+```sh
+# Local website + read-only JSON API (pages: /, /search, /doc/<key>, /symbols, /fonts, /sitemap.xml)
+apple-docs web serve --port 3134 [--base-url https://docs.example] [--no-metrics]
+
+# Static site (same pages, assets, sitemaps); rebuilds replace the output directory atomically
+apple-docs web build ./dist --base-url https://docs.example --max-pages 100000 --concurrency 8
+
+# MCP over Streamable HTTP
+apple-docs mcp serve --port 3133
+```
+
+Both servers share one `g-cqd/HTTP` chain: request IDs, per-peer rate limiting (`--rate-limit`), RED metrics
+(Prometheus text at `/metrics`, exposed by default only on loopback binds; `--metrics` / `--no-metrics`),
+security headers, `Date`, `ETag`/`304` validators, and Brotli/gzip content coding.
+
 ## Architecture & documentation
 
 - [`docs/adr/0001-swift-architecture-and-layering.md`](docs/adr/0001-swift-architecture-and-layering.md) — module graph, cross-platform vs Darwin setup split, storage/search strategy, and upstream package promotion policy.

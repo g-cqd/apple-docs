@@ -66,7 +66,8 @@ struct DocCSectionParityTests {
         #expect(byKind["topics"]?.contentText == "#### Codecs\n- lzfse")
         #expect(byKind["relationships"]?.contentText == "#### Conforms To\n- Sendable")
         #expect(!converted.sections.contains { $0.contentText.contains("doc://") })
-        #expect(converted.relationships.map(\.relationType) == ["topic", "conformsTo", "see-also"])
+        // Bun relation_type values.
+        #expect(converted.relationships.map(\.relationType) == ["child", "conforms_to", "see_also"])
     }
 
     @Test func `rendered markdown does not duplicate abstract or declaration sections`() throws {
@@ -107,5 +108,23 @@ struct DocCSectionParityTests {
         let converted = try DocCJSONConverter.convert(json: Array(json.utf8), key: try DocumentKey("coreml/guide"))
         let seeAlso = converted.sections.first { $0.sectionKind == "see_also" }
         #expect(seeAlso?.contentText == "#### Optimization")
+    }
+
+    @Test func `a target listed in two topic groups keeps its last group, like Bun's upsert`() throws {
+        let json = """
+            {"metadata": {"title": "PDFSelection"},
+             "topicSections": [
+                {"title": "Getting Information", "identifiers": ["doc://p/documentation/PDFKit/PDFSelection/color"]},
+                {"title": "Managing Drawing", "identifiers": ["doc://p/documentation/PDFKit/PDFSelection/color"]}],
+             "references": {"doc://p/documentation/PDFKit/PDFSelection/color":
+                {"title": "color", "url": "/documentation/pdfkit/pdfselection/color"}}}
+            """
+        let converted = try DocCJSONConverter.convert(
+            json: Array(json.utf8),
+            key: try DocumentKey("pdfkit/pdfselection")
+        )
+        #expect(converted.relationships.count == 1)
+        #expect(converted.relationships.first?.section == "Managing Drawing")
+        #expect(converted.relationships.first?.sortOrder == 1)
     }
 }

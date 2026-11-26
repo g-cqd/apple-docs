@@ -47,7 +47,8 @@ private struct MCPServeSubcommand: AsyncParsableCommand {
             dispatcher: dispatcher,
             host: server.host,
             port: server.port ?? 3_133,
-            allowedOrigins: Set(allowOrigin.map { $0.lowercased() })
+            allowedOrigins: Set(allowOrigin.map { $0.lowercased() }),
+            options: server.serverOptions
         )
     }
 }

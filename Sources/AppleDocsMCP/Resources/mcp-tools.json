@@ -127,13 +127,14 @@
   },
   {
     "name": "render_sf_symbol",
-    "description": "Render an SF Symbol to SVG with validated size, color, and background.",
+    "description": "Render an SF Symbol to SVG (inlined) or PNG (fetch via returned resource URI).",
     "isAssetTool": true,
     "inputSchema": {
       "type": "object",
       "properties": {
         "name": { "type": "string", "description": "SF Symbol name, e.g. pencil.and.sparkles." },
         "scope": { "type": "string", "enum": ["public", "private"] },
+        "format": { "type": "string", "enum": ["svg", "png"], "description": "Default png." },
         "size": { "type": "integer", "minimum": 8, "maximum": 1024 },
         "color": { "type": "string", "description": "Foreground hex or currentColor." },
         "background": { "type": "string", "description": "Background hex or transparent." }

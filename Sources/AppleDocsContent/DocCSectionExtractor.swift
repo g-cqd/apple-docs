@@ -128,7 +128,7 @@ enum DocCSectionExtractor {
         }
     }
 
-    private static func namedItemLine(_ item: JSON, refs: JSON) -> String? {
+    static func namedItemLine(_ item: JSON, refs: JSON) -> String? {
         guard let name = item["name"].string else { return nil }
         let desc = DocCContentRenderer.renderBlocks(item["content"].array ?? [], refs: refs)
             .replacing("\n\n", with: " ")

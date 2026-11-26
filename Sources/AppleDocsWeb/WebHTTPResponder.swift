@@ -1,10 +1,6 @@
 public import AemiHTTP
 public import AppleDocsCommands
 import AppleDocsCore
-import AppleDocsOutput
-import AppleDocsSearch
-import AppleDocsStorage
-import Foundation
 
 /// Cross-platform HTTP responder powering `apple-docs web serve` on `g-cqd/HTTP`.
 ///
@@ -13,17 +9,32 @@ import Foundation
 ///   `/.well-known/mcp/server-card.json`, `/.well-known/security.txt`
 /// - Read-only JSON API (all routed through `AppleDocsOutput`): `/api/search`, `/api/doc`,
 ///   `/api/frameworks`, `/api/symbols`, `/api/fonts`
-/// - Escaped SSR HTML views: `/` and `/doc/<key>`
+/// - Escaped SSR HTML pages: `/`, `/search`, `/doc/<key>`, `/symbols`, `/fonts`, styled 404
+/// - Resources: `/assets/*`, `/symbols/<scope>/<name>.svg`, `/sitemap.xml`, `/sitemaps/<slug>.xml`
 /// - Strict security response headers (`X-Content-Type-Options: nosniff`, `Referrer-Policy`, CSP).
 public struct WebHTTPResponder: HTTPResponder, Sendable {
-    private let reader: CorpusReaderHandle
+    let reader: CorpusReaderHandle
+    let site: WebSiteConfiguration
 
-    public init(reader: CorpusReaderHandle) {
+    public init(reader: CorpusReaderHandle, site: WebSiteConfiguration = WebSiteConfiguration()) {
         self.reader = reader
+        self.site = site
     }
 
-    public init(databasePath: String, maxReaders: Int = 4) {
-        self.init(reader: CorpusReaderHandle(databasePath: databasePath, maxReaders: maxReaders))
+    public init(
+        databasePath: String,
+        resourcesDirectory: String? = nil,
+        site: WebSiteConfiguration = WebSiteConfiguration(),
+        maxReaders: Int = 4
+    ) {
+        self.init(
+            reader: CorpusReaderHandle(
+                databasePath: databasePath,
+                resourcesDirectory: resourcesDirectory,
+                maxReaders: maxReaders
+            ),
+            site: site
+        )
     }
 
     public func close() async {
@@ -36,18 +47,30 @@ public struct WebHTTPResponder: HTTPResponder, Sendable {
         context: RequestContext
     ) async -> ServerResponse {
         guard request.method == .get || request.method == .head else {
-            return hardened(.status(.methodNotAllowed))
+            return hardened(.status(.methodNotAllowed), cacheControl: "no-store")
         }
-        let (path, query) = splitTarget(request.path)
+        let target = WebRequestTarget(request.path)
         let response: ServerResponse =
-            if let discovery = handleDiscovery(path: path) {
+            if let discovery = handleDiscovery(path: target.path) {
                 discovery
-            } else if path.hasPrefix("/api/") {
-                await handleAPI(path: path, query: query)
+            } else if target.path.hasPrefix("/api/") {
+                await handleAPI(path: target.path, query: target.query)
+            } else if let resource = await handleResource(path: target.path) {
+                resource
             } else {
-                await handleHTML(path: path)
+                await handlePage(target)
             }
-        return hardened(response)
+        return hardened(response, cacheControl: Self.cachePolicy(path: target.path, status: response.head.status))
+    }
+
+    /// `Cache-Control` for a response the responder did not mark itself: long-lived assets, short-lived
+    /// pages/API, nothing for errors and health probes.
+    static func cachePolicy(path: String, status: HTTPStatus) -> String {
+        guard status == .ok, path != "/healthz", path != "/readyz" else { return "no-store" }
+        if path.hasPrefix("/assets/") || (path.hasPrefix("/symbols/") && path.hasSuffix(".svg")) {
+            return "public, max-age=86400"
+        }
+        return path.hasPrefix("/api/") ? "public, max-age=60" : "public, max-age=300"
     }
 
     private func handleDiscovery(path: String) -> ServerResponse? {
@@ -55,7 +78,7 @@ public struct WebHTTPResponder: HTTPResponder, Sendable {
             case "/healthz", "/readyz":
                 return .json(Array("{\"status\":\"ok\",\"version\":\"\(AppleDocsVersion.current)\"}".utf8), status: .ok)
             case "/robots.txt":
-                return .text("User-agent: *\nAllow: /\n", status: .ok)
+                return .text("User-agent: *\nAllow: /\nSitemap: \(site.baseURL)/sitemap.xml\n", status: .ok)
             case "/.well-known/security.txt":
                 return .text("Contact: https://github.com/g-cqd/apple-docs/security/advisories\n", status: .ok)
             case "/.well-known/api-catalog":
@@ -71,122 +94,38 @@ public struct WebHTTPResponder: HTTPResponder, Sendable {
         }
     }
 
-    private func handleAPI(path: String, query: [String: String]) async -> ServerResponse {
-        do {
-            switch path {
-                case "/api/search":
-                    guard let q = query["q"], !q.isEmpty else {
-                        return .json(Array("{\"error\":\"missing q\"}".utf8), status: .badRequest)
-                    }
-                    let req = CorpusSearchRequest(
-                        query: q,
-                        framework: query["framework"],
-                        kind: query["kind"],
-                        language: query["language"],
-                        limit: query["limit"].flatMap(Int.init) ?? 25
-                    )
-                    let hits = try await reader.withConnection { conn in
-                        try CorpusQueryService.search(req, on: conn)
-                    }
-                    return .json(Array(try PublicProjection.encodeJSON(hits).utf8), status: .ok)
-
-                case "/api/doc":
-                    guard let rawPath = query["path"], let key = try? DocumentKey(rawPath) else {
-                        return .json(Array("{\"error\":\"invalid path\"}".utf8), status: .badRequest)
-                    }
-                    guard
-                        let detail = try await reader.withStore({
-                            try CorpusQueryService.readDocument(key: key, on: $0)
-                        })
-                    else {
-                        return .json(Array("{\"error\":\"not found\"}".utf8), status: .notFound)
-                    }
-                    return .json(Array(try PublicProjection.encodeJSON(detail).utf8), status: .ok)
-
-                case "/api/frameworks":
-                    let kind = query["kind"]
-                    let items = try await reader.withStore { try CorpusQueryService.listFrameworks(kind: kind, on: $0) }
-                    return .json(Array(try PublicProjection.encodeJSON(items).utf8), status: .ok)
-
-                case "/api/symbols":
-                    let q = query["q"] ?? ""
-                    let scope = query["scope"] ?? "public"
-                    let limit = query["limit"].flatMap(Int.init) ?? 100
-                    let items = try await reader.withConnection { conn in
-                        try AssetQueryService.searchSFSymbols(query: q, scope: scope, limit: limit, on: conn)
-                    }
-                    return .json(Array(try PublicProjection.encodeJSON(items).utf8), status: .ok)
-
-                case "/api/fonts":
-                    let items = try await reader.withConnection { conn in
-                        try AssetQueryService.listAppleFonts(on: conn)
-                    }
-                    return .json(Array(try PublicProjection.encodeJSON(items).utf8), status: .ok)
-
-                default:
-                    return .status(.notFound)
-            }
-        } catch {
-            return .json(Array("{\"error\":\"internal error\"}".utf8), status: .internalServerError)
-        }
-    }
-
-    private func handleHTML(path: String) async -> ServerResponse {
-        do {
-            if path == "/" || path == "/index.html" {
-                let roots = try await reader.withStore { try CorpusQueryService.listFrameworks(kind: nil, on: $0) }
-                return htmlResponse(WebHTMLRenderer.renderIndexPage(frameworks: roots), status: .ok)
-            }
-            if path.hasPrefix("/doc/") {
-                let rawKey = String(path.dropFirst("/doc/".count))
-                guard let key = try? DocumentKey(rawKey) else {
-                    return .text("Invalid document key.", status: .badRequest)
-                }
-                guard let detail = try await reader.withStore({ try CorpusQueryService.readDocument(key: key, on: $0) })
-                else {
-                    return .text("Not found.", status: .notFound)
-                }
-                return htmlResponse(WebHTMLRenderer.renderDocumentPage(detail), status: .ok)
-            }
-            return .status(.notFound)
-        } catch {
-            return .text("Internal error.", status: .internalServerError)
-        }
-    }
-
-    private func htmlResponse(_ html: String, status: HTTPStatus) -> ServerResponse {
+    /// A response with `body` and `contentType`; extra headers (e.g. a stricter CSP) are kept by ``hardened(_:)``.
+    func response(
+        _ body: [UInt8],
+        contentType: String,
+        status: HTTPStatus = .ok,
+        extraHeaders: [(HTTPFieldName, String)] = []
+    ) -> ServerResponse {
         var headers = HTTPFields()
-        _ = headers.setValue("text/html; charset=utf-8", for: .contentType)
-        return ServerResponse(HTTPResponse(status: status, headerFields: headers), body: Array(html.utf8))
+        _ = headers.setValue(contentType, for: .contentType)
+        for (name, value) in extraHeaders { _ = headers.setValue(value, for: name) }
+        return ServerResponse(HTTPResponse(status: status, headerFields: headers), body: body)
     }
 
-    private func hardened(_ response: ServerResponse) -> ServerResponse {
+    func htmlResponse(_ html: String, status: HTTPStatus = .ok) -> ServerResponse {
+        response(Array(html.utf8), contentType: "text/html; charset=utf-8", status: status)
+    }
+
+    func notFoundPage(_ path: String) -> ServerResponse {
+        htmlResponse(WebHTMLRenderer.renderNotFoundPage(path: path), status: .notFound)
+    }
+
+    private func hardened(_ response: ServerResponse, cacheControl: String) -> ServerResponse {
         var headers = response.head.headerFields
+        if headers[.cacheControl] == nil { _ = headers.setValue(cacheControl, for: .cacheControl) }
         _ = headers.setValue("nosniff", for: .xContentTypeOptions)
         _ = headers.setValue("no-referrer", for: .referrerPolicy)
-        _ = headers.setValue(
-            "default-src 'self'; object-src 'none'; frame-ancestors 'none'",
-            for: .contentSecurityPolicy
-        )
-        return ServerResponse(
-            HTTPResponse(status: response.head.status, headerFields: headers),
-            body: response.body
-        )
-    }
-
-    private func splitTarget(_ target: String) -> (String, [String: String]) {
-        guard let qIndex = target.firstIndex(of: "?") else { return (target, [:]) }
-        let path = String(target[..<qIndex])
-        let queryString = String(target[target.index(after: qIndex)...])
-        var params: [String: String] = [:]
-        for pair in queryString.split(separator: "&") {
-            let parts = pair.split(separator: "=", maxSplits: 1)
-            guard let rawKey = parts.first, !rawKey.isEmpty else { continue }
-            let key = String(rawKey).removingPercentEncoding ?? String(rawKey)
-            let rawValue = parts.count > 1 ? String(parts[1]) : ""
-            let value = rawValue.replacing("+", with: " ").removingPercentEncoding ?? rawValue
-            params[key] = value
+        if headers[.contentSecurityPolicy] == nil {
+            _ = headers.setValue(
+                "default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+                for: .contentSecurityPolicy
+            )
         }
-        return (path, params)
+        return ServerResponse(HTTPResponse(status: response.head.status, headerFields: headers), body: response.body)
     }
 }

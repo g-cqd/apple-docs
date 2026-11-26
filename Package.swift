@@ -170,6 +170,7 @@ let package = Package(
                 .product(name: "AemiHTTP", package: "HTTP"), .product(name: "AemiJSON", package: "AemiJSON")
             ],
             path: "Sources/AppleDocsWeb",
+            resources: [.process("Resources")],
             swiftSettings: strictSettings
         ),
         .executableTarget(
@@ -244,7 +245,7 @@ let package = Package(
         .testTarget(
             name: "AppleDocsWebTests",
             dependencies: [
-                "AppleDocsCore", "AppleDocsStorage", "AppleDocsWeb", "AppleDocsTestSupport",
+                "AppleDocsCommands", "AppleDocsCore", "AppleDocsStorage", "AppleDocsWeb", "AppleDocsTestSupport",
                 .product(name: "AemiHTTP", package: "HTTP")
             ],
             path: "Tests/AppleDocsWebTests",

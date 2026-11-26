@@ -166,78 +166,17 @@ extension MCPServerDispatcher {
         }
     }
 
-    private func invokeSearchSFSymbols(_ args: JSON) async throws -> String {
-        let query = args["query"].string ?? ""
-        let scope = args["scope"].string ?? "public"
-        let limit = args["limit"].int ?? 100
-        return try await encodeFromPool { conn in
-            try AssetQueryService.searchSFSymbols(query: query, scope: scope, limit: limit, on: conn)
-        }
-    }
-
-    private func invokeListAppleFonts() async throws -> String {
-        try await encodeFromPool { conn in
-            try AssetQueryService.listAppleFonts(on: conn)
-        }
-    }
-
-    private func invokeRenderSFSymbol(_ args: JSON) async throws -> String {
-        let name = try requiredString(args, key: "name", tool: "render_sf_symbol")
-        let options = SFSymbolRenderArgs(args: args)
-        let resourcesDir = reader.resourcesDirectory
-        return try await renderWithPermit {
-            try AssetRenderService.renderSFSymbolSVG(
-                name: name,
-                scope: options.scope,
-                size: options.size,
-                color: options.color,
-                background: options.background,
-                resourcesDirectory: resourcesDir
-            )
-        }
-    }
-
-    private func invokeRenderFontText(_ args: JSON) async throws -> String {
-        let fontID = try requiredString(args, key: "fontId", tool: "render_font_text")
-        let text = args["text"].string ?? "AaBbCc 0123"
-        let size = Double(args["size"].int ?? 48)
-        let dbPath = reader.databasePath
-        return try await renderWithPermit {
-            let conn = try SQLiteConnection(path: dbPath, options: .readOnly)
-            defer { conn.close() }
-            return try await AssetRenderService.renderFontTextSVG(fontID: fontID, text: text, size: size, on: conn)
-        }
-    }
-
-    private func renderWithPermit(_ work: @escaping @Sendable () async throws -> String) async throws -> String {
-        try await renderPermits.withPermit(work)
-    }
-
-    private func requiredString(_ args: JSON, key: String, tool: String) throws(JSONRPCError) -> String {
+    func requiredString(_ args: JSON, key: String, tool: String) throws(JSONRPCError) -> String {
         guard let value = args[key].string, !value.isEmpty else {
             throw JSONRPCError(code: JSONRPCError.invalidParams, message: "\(tool) requires '\(key)'.")
         }
         return value
     }
 
-    private func encodeFromPool<T: Encodable & Sendable>(
+    func encodeFromPool<T: Encodable & Sendable>(
         _ query: @escaping @Sendable (SQLiteConnection) throws -> T
     ) async throws -> String {
         let value = try await reader.withConnection(query)
         return try PublicProjection.encodeJSON(value)
-    }
-}
-
-private struct SFSymbolRenderArgs: Sendable {
-    let scope: String
-    let size: Int
-    let color: String
-    let background: String
-
-    init(args: JSON) {
-        self.scope = args["scope"].string ?? "public"
-        self.size = args["size"].int ?? 128
-        self.color = args["color"].string ?? "currentColor"
-        self.background = args["background"].string ?? "transparent"
     }
 }

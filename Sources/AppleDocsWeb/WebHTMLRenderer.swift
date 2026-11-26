@@ -1,8 +1,8 @@
-public import AppleDocsOutput
-
 /// Escaped, zero-dependency server-side HTML renderer for `apple-docs web serve` and static site export.
 ///
-/// Escapes every dynamic text interpolation against XSS (`&`, `<`, `>`, `"`, `'`) before emission.
+/// Every dynamic text interpolation is escaped (`&`, `<`, `>`, `"`, `'`) before emission, and pages carry
+/// no inline script or style: the shared layout links `/assets/style.css` and `/assets/app.js`, so the
+/// strict `default-src 'self'` Content-Security-Policy holds.
 public enum WebHTMLRenderer: Sendable {
     /// Escapes untrusted text for safe insertion into HTML element content or double-quoted attributes.
     public static func escapeHTML(_ raw: String) -> String {
@@ -21,48 +21,69 @@ public enum WebHTMLRenderer: Sendable {
         return out
     }
 
-    /// Renders a clean semantic HTML5 document page for a ``PublicDocumentDetail``.
-    public static func renderDocumentPage(_ detail: PublicDocumentDetail) -> String {
-        let title = escapeHTML(detail.document.title)
-        let framework = escapeHTML(detail.document.framework)
-        var bodyParts: [String] = ["<h1>\(title)</h1>", "<p class=\"meta\">\(framework)</p>"]
-        if let abstract = detail.document.abstract, !abstract.isEmpty {
-            bodyParts.append("<p class=\"abstract\">\(escapeHTML(abstract))</p>")
-        }
-        if let declaration = detail.document.declaration, !declaration.isEmpty {
-            bodyParts.append("<pre><code>\(escapeHTML(declaration))</code></pre>")
-        }
-        for section in detail.bodySections {
-            if let heading = section.heading, !heading.isEmpty {
-                bodyParts.append("<h2>\(escapeHTML(heading))</h2>")
+    /// The styled "Page not found" page served with `404`.
+    public static func renderNotFoundPage(path: String) -> String {
+        page(
+            title: "Page not found — apple-docs",
+            body: """
+                <section class="not-found">
+                <h1>Page not found</h1>
+                <p class="muted">Nothing is published at <code>\(escapeHTML(path))</code>.</p>
+                <p><a href="/">Browse all frameworks</a> or <a href="/search">search the documentation</a>.</p>
+                </section>
+                """
+        )
+    }
+
+    /// The shared HTML5 layout: header (brand, navigation, search, theme toggle), `<main>`, and footer.
+    static func page(title: String, description: String? = nil, body: String) -> String {
+        let meta = description.map { "\n<meta name=\"description\" content=\"\(escapeHTML($0))\">" } ?? ""
+        return """
+            <!doctype html>
+            <html lang="en">
+            <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>\(escapeHTML(title))</title>\(meta)
+            <link rel="stylesheet" href="/assets/style.css">
+            <script src="/assets/app.js"></script>
+            </head>
+            <body>
+            <header class="site-header">
+            <a class="brand" href="/">apple-docs</a>
+            <nav class="site-nav" aria-label="Primary">\
+            <a href="/">Home</a><a href="/search">Search</a><a href="/symbols">Symbols</a><a href="/fonts">Fonts</a>\
+            </nav>
+            <form class="site-search" action="/search" method="get" role="search">\
+            <input type="search" name="q" placeholder="Search documentation (/)" aria-label="Search documentation">\
+            </form>
+            <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle color theme">◐</button>
+            </header>
+            <main>
+            \(body)
+            </main>
+            <footer>Apple documentation mirrored locally by apple-docs. Content © Apple Inc.</footer>
+            </body>
+            </html>
+            """
+    }
+
+    /// A breadcrumb trail; crumbs without an `href` (the current page) render as plain text.
+    static func breadcrumbs(_ crumbs: [(label: String, href: String?)]) -> String {
+        let items = crumbs.map { crumb in
+            if let href = crumb.href {
+                return "<li><a href=\"\(escapeHTML(href))\">\(escapeHTML(crumb.label))</a></li>"
             }
-            bodyParts.append("<div class=\"section\"><p>\(escapeHTML(section.content))</p></div>")
+            return "<li aria-current=\"page\">\(escapeHTML(crumb.label))</li>"
         }
-        return wrapPage(title: "\(detail.document.title) — apple-docs", body: bodyParts.joined(separator: "\n"))
+        return "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><ol>\(items.joined())</ol></nav>"
     }
 
-    /// Renders the HTML landing index listing all available frameworks and collections.
-    public static func renderIndexPage(frameworks: [PublicFrameworkSummary]) -> String {
-        let items = frameworks.map { item in
-            let slug = escapeHTML(item.slug)
-            let name = escapeHTML(item.displayName)
-            return "<li><a href=\"/doc/\(slug)\">\(name)</a> <span>(\(item.pageCount))</span></li>"
+    /// A `<ul class="link-list">` of `/doc/<path>` links.
+    static func linkList(_ links: [(path: String, title: String)]) -> String {
+        let items = links.map { link in
+            "<li><a href=\"/doc/\(escapeHTML(link.path))\">\(escapeHTML(link.title))</a></li>"
         }
-        let body = "<h1>Apple Documentation</h1><ul>\(items.joined(separator: "\n"))</ul>"
-        return wrapPage(title: "apple-docs", body: body)
-    }
-
-    private static func wrapPage(title: String, body: String) -> String {
-        """
-        <!doctype html>
-        <html lang="en">
-        <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>\(escapeHTML(title))</title>
-        </head>
-        <body><main>\(body)</main></body>
-        </html>
-        """
+        return "<ul class=\"link-list\">\(items.joined())</ul>"
     }
 }

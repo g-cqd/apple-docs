@@ -115,22 +115,7 @@ public enum CorpusQueryService: Sendable {
                 .integer(Int64(clampedLimit))
             ]
         )
-        var items: [PublicDocumentSummary] = []
-        items.reserveCapacity(rows.count)
-        for row in rows {
-            let rawKey = try row.text(at: 0)
-            guard let key = try? DocumentKey(rawKey) else { continue }
-            items.append(
-                PublicDocumentSummary(
-                    key: key,
-                    title: try row.text(at: 1),
-                    sourceType: SourceKind(rawValue: try row.text(at: 2)) ?? .appleDocC,
-                    isDeprecated: try row.bool(at: 3),
-                    isBeta: try row.bool(at: 4)
-                )
-            )
-        }
-        return items
+        return try documentSummaries(from: rows)
     }
 
     /// Direction filter for relationship queries.

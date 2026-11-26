@@ -80,36 +80,52 @@ public enum DocCJSONConverter: Sendable {
         sourceKey: DocumentKey
     ) -> [DocumentRelationshipRecord] {
         var edges: [DocumentRelationshipRecord] = []
-        var seen: Set<String> = []
-        let groupsByType: [(JSON, String)] = [
-            (root["topicSections"], "topic"),
-            (root["relationshipsSections"], "relationship"),
-            (root["seeAlsoSections"], "see-also")
+        var indexByEdge: [String: Int] = [:]
+        var order = 0
+        // Bun `normalize/relationships.js` relation types: topics are `child`, see-also groups `see_also`, and
+        // relationship groups keep their DocC type with inheritance/conformance mapped to snake case.
+        let groupsByType: [(JSON, String?)] = [
+            (root["topicSections"], "child"),
+            (root["relationshipsSections"], nil),
+            (root["seeAlsoSections"], "see_also")
         ]
-        for (sectionsNode, defaultType) in groupsByType {
+        for (sectionsNode, fixedType) in groupsByType {
             for group in sectionsNode.array ?? [] {
-                let kind = group["type"].string ?? defaultType
+                let kind = fixedType ?? Self.relationType(forDocCType: group["type"].string)
                 for id in (group["identifiers"].array ?? []).compactMap(\.string) where !id.hasPrefix(externalIDPrefix)
                 {
                     let candidate = refs[id]["url"].string ?? id
-                    guard let target = normalizeReferenceKey(candidate), target != sourceKey,
-                        seen.insert("\(target.rawValue)|\(kind)").inserted
-                    else {
-                        continue
-                    }
-                    edges.append(
-                        DocumentRelationshipRecord(
-                            fromKey: sourceKey,
-                            toKey: target,
-                            relationType: kind,
-                            section: group["title"].string,
-                            sortOrder: edges.count
-                        )
+                    guard let target = normalizeReferenceKey(candidate), target != sourceKey else { continue }
+                    let edge = DocumentRelationshipRecord(
+                        fromKey: sourceKey,
+                        toKey: target,
+                        relationType: kind,
+                        section: group["title"].string,
+                        sortOrder: order
                     )
+                    order += 1
+                    // Bun upserts on (from, to, type): a repeated edge keeps its last section and order.
+                    if let index = indexByEdge["\(target.rawValue)|\(kind)"] {
+                        edges[index] = edge
+                    } else {
+                        indexByEdge["\(target.rawValue)|\(kind)"] = edges.count
+                        edges.append(edge)
+                    }
                 }
             }
         }
         return edges
+    }
+
+    /// Bun's `RELATION_TYPE_MAP` for `relationshipsSections` group types.
+    private static func relationType(forDocCType type: String?) -> String {
+        switch type {
+            case "inheritsFrom": "inherits_from"
+            case "conformsTo": "conforms_to"
+            case "inheritedBy": "inherited_by"
+            case let other?: other
+            case nil: "related"
+        }
     }
 
     /// Structured relationship targets plus Bun's catch-all sweep of the `references` map: inline `topic`
