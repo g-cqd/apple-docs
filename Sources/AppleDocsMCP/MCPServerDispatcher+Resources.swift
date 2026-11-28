@@ -10,6 +10,7 @@ import OrderedCollections
 extension MCPServerDispatcher {
     /// The static MCP URI templates (`apple-docs://doc/{+key}`, `apple-docs://framework/{slug}`,
     /// `apple-docs://sf-symbol/{scope}/{name}.{format}`).
+    // @dl:disable -- the three URI templates the server advertises, each its own literal
     static let resourceTemplates = [
         MCPResourceTemplate(
             uriTemplate: "apple-docs://doc/{+key}",
