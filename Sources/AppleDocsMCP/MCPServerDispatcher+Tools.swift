@@ -1,5 +1,6 @@
 import AemiJSONCore
 import AemiJSONRPC
+import AemiMCP
 import AppleDocsCommands
 import AppleDocsCore
 import AppleDocsOutput
@@ -8,26 +9,20 @@ import AppleDocsStorage
 import OrderedCollections
 
 extension MCPServerDispatcher {
-    func handleToolCall(_ params: JSON?) async -> Result<JSONValue, JSONRPCError> {
-        guard let params, params.isObject, let name = params["name"].string else {
-            return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Missing tool name."))
-        }
+    /// The tool `name`'s result: the projected payload as compact JSON text plus `structuredContent` (Bun
+    /// `createMcpTextResult`). A tool's failure is a result with `isError` (MCP SDK behaviour Bun relies on); an unknown
+    /// tool is a protocol error.
+    func toolResult(name: String, arguments: JSON) async throws -> MCPToolResult {
         do {
-            let payload = try await cachedTool(name: name, arguments: params["arguments"])
-            // Bun `createMcpTextResult`: the projected payload as compact JSON text plus `structuredContent`.
-            return .success(
-                .object([
-                    "content": .array([
-                        .object(["type": .string("text"), "text": .string(JavaScriptJSON.stringify(payload))])
-                    ]),
-                    "structuredContent": payload
-                ])
+            let payload = try await cachedTool(name: name, arguments: arguments)
+            return MCPToolResult(
+                content: [.text(JavaScriptJSON.stringify(payload))],
+                structuredContent: try? payload.encodedBytes()
             )
         } catch let rpcError as JSONRPCError where rpcError.code == JSONRPCError.methodNotFound {
-            return .failure(rpcError)
+            throw rpcError
         } catch {
-            // Tool failures are results with `isError` (MCP SDK behaviour Bun relies on), not protocol errors.
-            return .success(Self.toolError(Self.message(for: error)))
+            return .error(Self.message(for: error))
         }
     }
 
@@ -47,13 +42,6 @@ extension MCPServerDispatcher {
         if case .bool(false)? = MCPPayloadProjection.member(payload, "found") { return true }
         if case .array(let results)? = MCPPayloadProjection.member(payload, "results"), results.isEmpty { return true }
         return false
-    }
-
-    static func toolError(_ message: String) -> JSONValue {
-        .object([
-            "content": .array([.object(["type": .string("text"), "text": .string(message)])]),
-            "isError": .bool(true)
-        ])
     }
 
     private static func message(for error: any Error) -> String {

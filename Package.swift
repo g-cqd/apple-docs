@@ -34,6 +34,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/Aemi-Studio/aemi.git", revision: "9f8d1a3eafed0ad23919b9c68d33606632ce0659"),
         .package(url: "https://github.com/g-cqd/AemiJSON.git", revision: "fb4478051725c95614e76b15ac11e9a5c6a502a3"),
+        .package(url: "https://github.com/g-cqd/AemiMCP.git", revision: "807efc6822ac7bf332c98799e442f804ece911df"),
         .package(url: "https://github.com/g-cqd/AemiSearch.git", revision: "3b20d77581083c6996b28663bae4c0d341cc1b2f"),
         .package(url: "https://github.com/g-cqd/AemiHTML.git", revision: "1e6b46932f423e8e9ccbb1a7de297005ead746b8"),
         .package(
@@ -179,6 +180,7 @@ let package = Package(
                 "AppleDocsCommands", "AppleDocsCore", "AppleDocsOutput", "AppleDocsSearch", "AppleDocsStorage",
                 .product(name: "AemiJSONCore", package: "AemiJSON"), .product(name: "AemiJSONRPC", package: "AemiJSON"),
                 .product(name: "AemiHTTP", package: "HTTP"),
+                .product(name: "AemiMCP", package: "AemiMCP"), .product(name: "AemiMCPHTTP", package: "AemiMCP"),
                 .product(name: "OrderedCollections", package: "swift-collections")
             ],
             path: "Sources/AppleDocsMCP",

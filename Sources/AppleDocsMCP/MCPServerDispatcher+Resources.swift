@@ -1,5 +1,6 @@
 import AemiJSONCore
 import AemiJSONRPC
+import AemiMCP
 import AppleDocsCommands
 import AppleDocsCore
 import AppleDocsOutput
@@ -7,84 +8,77 @@ import Foundation
 import OrderedCollections
 
 extension MCPServerDispatcher {
-    /// Returns the static MCP URI templates (`apple-docs://doc/{+key}`, `apple-docs://framework/{slug}`,
+    /// The static MCP URI templates (`apple-docs://doc/{+key}`, `apple-docs://framework/{slug}`,
     /// `apple-docs://sf-symbol/{scope}/{name}.{format}`).
-    func resourceTemplatesResult() -> JSONValue {
-        .object([
-            "resourceTemplates": .array([
-                .object([
-                    "uriTemplate": .string("apple-docs://doc/{+key}"),
-                    "name": .string("doc"),
-                    "description": .string("Read a documentation page as Markdown by canonical key."),
-                    "mimeType": .string("text/markdown")
-                ]),
-                .object([
-                    "uriTemplate": .string("apple-docs://framework/{slug}"),
-                    "name": .string("framework"),
-                    "description": .string("Browse documents inside a framework or collection."),
-                    "mimeType": .string("application/json")
-                ]),
-                .object([
-                    "uriTemplate": .string("apple-docs://sf-symbol/{scope}/{name}.{format}"),
-                    "name": .string("sf-symbol"),
-                    "description": .string(
-                        "Read or render an SF Symbol asset (format svg or png; optional ?size=&color=&background=)."
-                    ),
-                    "mimeType": .string("application/octet-stream")
-                ])
-            ])
-        ])
-    }
+    static let resourceTemplates = [
+        MCPResourceTemplate(
+            uriTemplate: "apple-docs://doc/{+key}",
+            name: "doc",
+            description: "Read a documentation page as Markdown by canonical key.",
+            mimeType: "text/markdown"
+        ),
+        MCPResourceTemplate(
+            uriTemplate: "apple-docs://framework/{slug}",
+            name: "framework",
+            description: "Browse documents inside a framework or collection.",
+            mimeType: "application/json"
+        ),
+        MCPResourceTemplate(
+            uriTemplate: "apple-docs://sf-symbol/{scope}/{name}.{format}",
+            name: "sf-symbol",
+            description: "Read or render an SF Symbol asset (format svg or png; optional ?size=&color=&background=).",
+            mimeType: "application/octet-stream"
+        )
+    ]
 
-    /// Lists concrete `apple-docs://framework/<slug>` resources available in the active corpus.
-    func handleResourcesList() async -> Result<JSONValue, JSONRPCError> {
+    /// The concrete `apple-docs://framework/<slug>` resources available in the active corpus.
+    func resources() async throws(JSONRPCError) -> [MCPResource] {
         do {
             let roots = try await reader.withStore { try CorpusQueryService.listFrameworks(on: $0) }
-            let resources: [JSONValue] = roots.map { root in
-                .object([
-                    "uri": .string("apple-docs://framework/\(root.slug)"),
-                    "name": .string(root.displayName),
-                    "mimeType": .string("application/json")
-                ])
+            return roots.map { root in
+                MCPResource(
+                    uri: "apple-docs://framework/\(root.slug)",
+                    name: root.displayName,
+                    mimeType: "application/json"
+                )
             }
-            return .success(.object(["resources": .array(resources)]))
         } catch {
-            return .failure(JSONRPCError(code: JSONRPCError.internalError, message: "Failed listing resources."))
+            throw JSONRPCError(code: JSONRPCError.internalError, message: "Failed listing resources.")
         }
     }
 
     /// Reads an `apple-docs://` resource URI (`doc/`, `framework/`, or `sf-symbol/`).
-    func handleResourceRead(_ params: JSON?) async -> Result<JSONValue, JSONRPCError> {
-        guard let uri = params?["uri"].string, !uri.isEmpty else {
-            return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "resources/read requires 'uri'."))
-        }
+    func readResource(_ uri: String) async throws(JSONRPCError) -> [MCPResourceContents] {
         do {
             if uri.hasPrefix("apple-docs://doc/") {
-                let rawKey = String(uri.dropFirst("apple-docs://doc/".count))
-                return try await readDocResource(uri: uri, rawKey: rawKey)
+                return try await readDocResource(uri: uri, rawKey: String(uri.dropFirst("apple-docs://doc/".count)))
             }
             if uri.hasPrefix("apple-docs://framework/") {
-                let slug = String(uri.dropFirst("apple-docs://framework/".count))
-                return try await readFrameworkResource(uri: uri, slug: slug)
+                return try await readFrameworkResource(
+                    uri: uri,
+                    slug: String(uri.dropFirst("apple-docs://framework/".count))
+                )
             }
             if uri.hasPrefix("apple-docs://sf-symbol/") {
-                let tail = String(uri.dropFirst("apple-docs://sf-symbol/".count))
-                return try await readSymbolResource(uri: uri, tail: tail)
+                return try await readSymbolResource(
+                    uri: uri,
+                    tail: String(uri.dropFirst("apple-docs://sf-symbol/".count))
+                )
             }
-            return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Unsupported resource URI: \(uri)"))
         } catch let rpcError as JSONRPCError {
-            return .failure(rpcError)
+            throw rpcError
         } catch {
-            return .failure(JSONRPCError(code: JSONRPCError.internalError, message: "Resource read failed."))
+            throw JSONRPCError(code: JSONRPCError.internalError, message: "Resource read failed.")
         }
+        throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Unsupported resource URI: \(uri)")
     }
 
-    private func readDocResource(uri: String, rawKey: String) async throws -> Result<JSONValue, JSONRPCError> {
+    private func readDocResource(uri: String, rawKey: String) async throws -> [MCPResourceContents] {
         let key: DocumentKey
         do {
             key = try DocumentKey(rawKey)
         } catch {
-            return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Invalid document key."))
+            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Invalid document key.")
         }
         let markdown: String
         if let cached = await markdownCache.get(key.rawValue) {
@@ -92,30 +86,30 @@ extension MCPServerDispatcher {
         } else {
             guard let detail = try await reader.withStore({ try CorpusQueryService.readDocument(key: key, on: $0) })
             else {
-                return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Document not found."))
+                throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Document not found.")
             }
             markdown = detail.renderMarkdown()
             await markdownCache.set(key.rawValue, value: markdown)
         }
-        return .success(resourceContent(uri: uri, mimeType: "text/markdown", text: markdown))
+        return [.text(uri: uri, mimeType: "text/markdown", markdown)]
     }
 
-    private func readFrameworkResource(uri: String, slug: String) async throws -> Result<JSONValue, JSONRPCError> {
+    private func readFrameworkResource(uri: String, slug: String) async throws -> [MCPResourceContents] {
         let entries = try await reader.withConnection { conn in
             try CorpusQueryService.browse(framework: slug, limit: 100, on: conn)
         }
         let json = try PublicProjection.encodeJSON(entries)
-        return .success(resourceContent(uri: uri, mimeType: "application/json", text: json))
+        return [.text(uri: uri, mimeType: "application/json", json)]
     }
 
-    private func readSymbolResource(uri: String, tail: String) async throws -> Result<JSONValue, JSONRPCError> {
+    private func readSymbolResource(uri: String, tail: String) async throws -> [MCPResourceContents] {
         let target = tail.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
         let parts = target[0].split(separator: "/", maxSplits: 1)
         let format = parts.count == 2 && parts[1].hasSuffix(".png") ? "png" : "svg"
         guard parts.count == 2, parts[1].hasSuffix(".\(format)"),
             let name = String(parts[1].dropLast(format.count + 1)).removingPercentEncoding
         else {
-            return .failure(JSONRPCError(code: JSONRPCError.invalidParams, message: "Invalid SF Symbol resource URI."))
+            throw JSONRPCError(code: JSONRPCError.invalidParams, message: "Invalid SF Symbol resource URI.")
         }
         var query: [String: String] = [:]
         for pair in (target.count > 1 ? target[1] : "").split(separator: "&") {
@@ -138,10 +132,7 @@ extension MCPServerDispatcher {
                     resourcesDirectory: resourcesDir
                 )
             }
-            let content: JSONValue = .object([
-                "uri": .string(uri), "mimeType": .string("image/png"), "blob": .string(Data(png).base64EncodedString())
-            ])
-            return .success(.object(["contents": .array([content])]))
+            return [.blob(uri: uri, mimeType: "image/png", base64: Data(png).base64EncodedString())]
         }
         let svg = try await renderPermits.withPermit {
             try AssetRenderService.renderSFSymbolSVG(
@@ -153,18 +144,6 @@ extension MCPServerDispatcher {
                 resourcesDirectory: resourcesDir
             )
         }
-        return .success(resourceContent(uri: uri, mimeType: "image/svg+xml", text: svg))
-    }
-
-    private func resourceContent(uri: String, mimeType: String, text: String) -> JSONValue {
-        .object([
-            "contents": .array([
-                .object([
-                    "uri": .string(uri),
-                    "mimeType": .string(mimeType),
-                    "text": .string(text)
-                ])
-            ])
-        ])
+        return [.text(uri: uri, mimeType: "image/svg+xml", svg)]
     }
 }

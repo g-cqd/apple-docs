@@ -1,22 +1,34 @@
 public import AemiJSONCore
 public import AemiJSONRPC
+import AemiMCP
 import AppleDocsCommands
 import AppleDocsCore
 import Foundation
 import OrderedCollections
+import Synchronization
 
 /// Cross-platform MCP server dispatcher handling JSON-RPC 2.0 requests (`initialize`, `ping`,
 /// `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`)
 /// against a pooled read-only ``CorpusReaderHandle``, bounded LRU cache, and render semaphore.
+///
+/// The protocol (version negotiation, cancellation, strict JSON-RPC) is AemiMCP's `MCPServer`; this type owns the tools
+/// and resources.
 public final class MCPServerDispatcher: Sendable {
-    /// Supported MCP protocol version advertised during `initialize`.
+    /// The MCP protocol version answered when the client offers none, or one this server does not speak (the Bun
+    /// server's).
     public static let protocolVersion = "2025-03-26"
+    /// Every version this server speaks: the default first, then the others AemiMCP knows, newest first. A client offering
+    /// one of them gets it back.
+    public static let protocolVersions =
+        [protocolVersion] + MCPProtocolVersion.supported.filter { $0 != protocolVersion }
 
     let reader: CorpusReaderHandle
     let markdownCache: BoundedLRUCache<String, String>
     let renderPermits: AsyncPermitPool
     /// Tool result cache (`nil` when `APPLE_DOCS_MCP_CACHE=off`).
     let toolCache: MCPToolCache?
+    /// The protocol server, its handlers answered by this dispatcher; set once at the end of `init`.
+    private let protocolServer = ProtocolServerSlot()
 
     /// Creates a dispatcher backed by `databasePath` with bounded reader pool, LRU cache, and render concurrency cap.
     public init(
@@ -38,6 +50,7 @@ public final class MCPServerDispatcher: Sendable {
             ProcessInfo.processInfo.environment["APPLE_DOCS_MCP_CACHE"] == "off"
             ? nil
             : MCPToolCache(stamp: { stamp.current() }, now: { CorpusStamp.monotonicMilliseconds() })
+        protocolServer.install(makeProtocolServer())
     }
 
     /// Starts background warmup of the semantic index (`Model2VecEmbedder` + `ChunkVectorStore`).
@@ -52,83 +65,57 @@ public final class MCPServerDispatcher: Sendable {
     }
 
     /// Evaluates one raw JSON-RPC 2.0 payload byte array and returns encoded response bytes
-    /// (`nil` for notifications that require no response).
+    /// (`nil` for notifications, responses and cancelled requests).
     public func handleRawPayload(_ body: [UInt8]) async -> [UInt8]? {
-        let message: JSONRPCMessage
-        do {
-            message = try JSONRPCMessage(parsing: body)
-        } catch {
-            return try? error.response()
-        }
-        switch message {
-            case .notification:
-                return nil
-            case .response:
-                let err = JSONRPCError(code: JSONRPCError.invalidRequest, message: "Server does not accept responses.")
-                return try? JSONRPC.response(id: nil, error: err)
-            case .request(let request):
-                let outcome = await dispatch(request)
-                switch outcome {
-                    case .success(let value):
-                        return try? JSONRPC.response(id: request.id, result: value)
-                    case .failure(let error):
-                        return try? JSONRPC.response(id: request.id, error: error)
-                }
-        }
+        await protocolServer.server.handle(body)
     }
 
     /// Dispatches one parsed ``JSONRPCRequest`` into an MCP protocol result or error.
     public func dispatch(_ request: JSONRPCRequest) async -> Result<JSONValue, JSONRPCError> {
-        switch request.method {
-            case "initialize":
-                return .success(initializeResult())
-            case "ping":
-                return .success(.object([:]))
-            case "tools/list":
-                return .success(toolsListResult())
-            case "tools/call":
-                return await handleToolCall(request.params)
-            case "resources/list":
-                return await handleResourcesList()
-            case "resources/templates/list":
-                return .success(resourceTemplatesResult())
-            case "resources/read":
-                return await handleResourceRead(request.params)
-            default:
-                return .failure(
-                    JSONRPCError(code: JSONRPCError.methodNotFound, message: "Unknown method: \(request.method)")
-                )
-        }
+        await protocolServer.server.dispatch(request)
     }
 
-    private func initializeResult() -> JSONValue {
-        .object([
-            "protocolVersion": .string(Self.protocolVersion),
-            "capabilities": .object([
-                "tools": .object(["listChanged": .bool(false)]),
-                "resources": .object(["subscribe": .bool(false), "listChanged": .bool(false)])
-            ]),
-            "serverInfo": .object([
-                "name": .string("apple-docs"),
-                "version": .string(AppleDocsVersion.current)
-            ])
-        ])
+    /// The server AemiMCP's stdio runner serves.
+    var protocolHandler: MCPServer { protocolServer.server }
+
+    private func makeProtocolServer() -> MCPServer {
+        MCPServer(
+            configuration: MCPServerConfiguration(
+                name: "apple-docs",
+                version: AppleDocsVersion.current,
+                protocolVersions: Self.protocolVersions,
+                supportsResources: true
+            ),
+            tools: MCPToolDescriptor.allTools.map(\.tool),
+            callTool: { [weak self] name, arguments in
+                try await Self.alive(self).toolResult(name: name, arguments: arguments.json)
+            },
+            listResources: { [weak self] in try await Self.alive(self).resources() },
+            listResourceTemplates: { Self.resourceTemplates },
+            readResource: { [weak self] uri in try await Self.alive(self).readResource(uri) }
+        )
     }
 
-    private func toolsListResult() -> JSONValue {
-        let toolObjects: [JSONValue] = MCPToolDescriptor.allTools.map { descriptor in
-            .object([
-                "name": .string(descriptor.name),
-                "description": .string(descriptor.description),
-                "annotations": .object([
-                    "readOnlyHint": .bool(descriptor.isReadOnly),
-                    "destructiveHint": .bool(false),
-                    "idempotentHint": .bool(true),
-                    "openWorldHint": .bool(false)
-                ]),
-                "inputSchema": descriptor.inputSchema
-            ])
+    /// The dispatcher a handler serves, which owns the server and so outlives every request it handles.
+    private static func alive(_ dispatcher: MCPServerDispatcher?) throws(JSONRPCError) -> MCPServerDispatcher {
+        guard let dispatcher else {
+            throw JSONRPCError(code: JSONRPCError.internalError, message: "The server is shutting down.")
         }
-        return .object(["tools": .array(toolObjects)])
+        return dispatcher
+    }
+}
+
+/// Holds the dispatcher's protocol server, which is made after the dispatcher's other members because its handlers call
+/// the dispatcher.
+private final class ProtocolServerSlot: Sendable {
+    private let slot = Mutex<MCPServer?>(nil)
+
+    func install(_ server: MCPServer) {
+        slot.withLock { $0 = server }
+    }
+
+    var server: MCPServer {
+        // `install` runs at the end of the dispatcher's init, before any caller can reach it.
+        slot.withLock { $0 } ?? MCPServer(configuration: MCPServerConfiguration(name: "apple-docs", version: "0"))
     }
 }

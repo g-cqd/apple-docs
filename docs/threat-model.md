@@ -15,7 +15,7 @@ This document is the living threat model for `apple-docs` (Swift). Every new inp
 | Boundary | Direction | Untrusted Input | Enforcement Layer |
 |---|---|---|---|
 | CLI arguments & document keys | Inbound | Paths, keys, flags, query strings | `DocumentKey` canonicalizer/validator (`AppleDocsCore`) |
-| MCP stdio & Streamable HTTP | Inbound | JSON-RPC payloads, HTTP headers, `Origin`, `X-Request-Id` | `g-cqd/HTTP` body caps, `AemiJSONRPC`, request policy, bounded concurrency semaphore, `AppleDocsOutput` allowlist |
+| MCP stdio & Streamable HTTP | Inbound | JSON-RPC payloads, HTTP headers, `Origin`, `X-Request-Id` | `g-cqd/HTTP` body caps, `AemiJSONRPC`, AemiMCP's strict dispatch and `Origin` check, request policy, bounded concurrency semaphore, `AppleDocsOutput` allowlist |
 | Web HTTP & `/api/*` | Inbound | URL paths, query parameters, `X-Forwarded-For` | `g-cqd/HTTP`, per-IP LRU rate limiter, strict parameter parsers, CSP/security headers, `AppleDocsOutput` allowlist |
 | Snapshot archives (`.tar.zst`, `.tar.gz`) | Inbound | Archive headers, member paths, symlinks/hardlinks, compressed streams | Mandatory `.sha256` verification on remote releases; pre-extract member allowlist + canonical root containment + bounded decompression ratio |
 | Upstream crawlers & DocC/HTML/YAML/ONNX | Inbound | Remote JSON, HTML, Markdown, YAML, Protobuf, PDF/SFNT bytes | Non-backtracking `AemiRegex`, iterative tape parsers (`AemiJSON`, `AemiHTML`, `AemiMarkdown`, `AemiProtobuf`), depth/size caps, SSRF/IP pinning on redirects |

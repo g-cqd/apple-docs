@@ -1,4 +1,5 @@
 public import AemiJSONCore
+import AemiMCP
 import Foundation
 import OrderedCollections
 
@@ -20,6 +21,21 @@ public struct MCPToolDescriptor: Equatable, Sendable {
     }
 
     private static var emptySchema: JSONValue { .object(["type": .string("object")]) }
+
+    /// The tool as `tools/list` lists it: read-only per its descriptor, never destructive, idempotent, closed world.
+    var tool: MCPTool {
+        MCPTool(
+            name: name,
+            description: description,
+            inputSchema: (try? MCPJSONObject(validating: Array(inputSchemaJSON.utf8))) ?? .empty,
+            annotations: MCPToolAnnotations(
+                readOnly: isReadOnly,
+                destructive: false,
+                idempotent: true,
+                openWorld: false
+            )
+        )
+    }
 
     public init(
         name: String,

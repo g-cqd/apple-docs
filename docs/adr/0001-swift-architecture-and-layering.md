@@ -61,6 +61,7 @@ All dependencies are restricted to pinned revisions / minor ranges from `Aemi-St
 | `Aemi-Studio/aemi` | `AemiKernel`, `AemiDigest`, `AemiIO`, `AemiLexers`, `AemiRuntime`, `AemiTestKit` (Linux-safe products; `AemiCore` imports `Combine` and is Apple-only) |
 | `g-cqd/HTTP` | Zero-NIO HTTP/1.1 + HTTP/2 (+ HTTP/3 on macOS) server for MCP Streamable HTTP & Web |
 | `g-cqd/AemiJSON` | SIMD JSON tape parser/encoder + `AemiJSONRPC` for MCP JSON-RPC 2.0 |
+| `g-cqd/AemiMCP` | The MCP protocol (`MCPServer`: version negotiation, cancellation, strict JSON-RPC), the stdio runner, and `AemiMCPHTTP`'s Streamable HTTP responder |
 | `g-cqd/AemiSearch` | In-memory BM25 / trigram search index & binary snapshots |
 | `g-cqd/AemiHTML` | WHATWG HTML5 parser & HTML-to-Markdown extractors |
 | `g-cqd/AemiMarkdown` | Zero-copy CommonMark/GFM parser |
